@@ -1,0 +1,97 @@
+{
+  "metadata": {
+    "repository": "/home/user/my-project",
+    "analysis_type": "since_tag",
+    "reference": "v1.2.0",
+    "commits_analyzed": 18
+  },
+  "summary": {
+    "total_commits": 18,
+    "by_type": {
+      "feat": {
+        "count": 7,
+        "label": "Features",
+        "emoji": "✨"
+      },
+      "fix": {
+        "count": 5,
+        "label": "Bug Fixes",
+        "emoji": "🐛"
+      },
+      "docs": {
+        "count": 3,
+        "label": "Documentation",
+        "emoji": "📝"
+      },
+      "refactor": {
+        "count": 2,
+        "label": "Refactoring",
+        "emoji": "♻️"
+      },
+      "test": {
+        "count": 1,
+        "label": "Tests",
+        "emoji": "✅"
+      }
+    },
+    "breaking_changes": [],
+    "conventional_percentage": 100.0
+  },
+  "statistics": {
+    "total_commits": 18,
+    "contributors": [
+      "John Doe <john@example.com>",
+      "Jane Smith <jane@example.com>"
+    ],
+    "contributor_count": 2,
+    "date_range": {
+      "oldest": "2024-10-15 14:23:11 +0000",
+      "newest": "2024-12-20 09:15:33 +0000"
+    },
+    "total_files_changed": 47,
+    "remote_url": "https://github.com/example/my-project"
+  },
+  "changes": [
+    {
+      "type": "feat",
+      "label": "Features",
+      "emoji": "✨",
+      "count": 7,
+      "commits": [
+        {
+          "hash": "abc123def456...",
+          "short_hash": "abc123d",
+          "author": "John Doe",
+          "email": "john@example.com",
+          "date": "2024-12-20 09:15:33 +0000",
+          "message": "Add user authentication system",
+          "scope": "auth",
+          "is_breaking": false,
+          "files_changed": 8,
+          "url": "https://github.com/example/my-project/commit/abc123def456..."
+        }
+      ]
+    },
+    {
+      "type": "fix",
+      "label": "Bug Fixes",
+      "emoji": "🐛",
+      "count": 5,
+      "commits": [
+        {
+          "hash": "def789ghi012...",
+          "short_hash": "def789g",
+          "author": "Jane Smith",
+          "email": "jane@example.com",
+          "date": "2024-12-18 16:42:21 +0000",
+          "message": "Resolve memory leak in data processing",
+          "scope": "core",
+          "is_breaking": false,
+          "files_changed": 3,
+          "url": "https://github.com/example/my-project/commit/def789ghi012..."
+        }
+      ]
+    }
+  ],
+  "markdown_output": "# Changelog\n\n## Summary\n\n**Total Commits**: 18\n**Date Range**: 2024-12-20 09:15:33 +0000 to 2024-10-15 14:23:11 +0000\n**Contributors**: 2\n**Conventional Commits**: 100.0%\n\n### Changes by Type\n\n- ✨ **Features**: 7\n- 🐛 **Bug Fixes**: 5\n- 📝 **Documentation**: 3\n- ♻️ **Refactoring**: 2\n- ✅ **Tests**: 1\n\n## Changes\n\n### ✨ Features (7)\n\n*New functionality added*\n\n- [`abc123d`](https://github.com/example/my-project/commit/abc123def456...) **auth**: Add user authentication system (*John Doe*, 2024-12-20)\n\n### 🐛 Bug Fixes (5)\n\n*Issues resolved*\n\n- [`def789g`](https://github.com/example/my-project/commit/def789ghi012...) **core**: Resolve memory leak in data processing (*Jane Smith*, 2024-12-18)\n"
+}

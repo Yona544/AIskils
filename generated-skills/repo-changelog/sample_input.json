@@ -1,0 +1,9 @@
+{
+  "repo_path": "/home/user/my-project",
+  "since_tag": "v1.2.0",
+  "max_commits": 20,
+  "group_by_type": true,
+  "output_format": "markdown",
+  "include_emoji": true,
+  "include_links": true
+}
