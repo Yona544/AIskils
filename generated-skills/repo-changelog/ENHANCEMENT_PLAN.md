@@ -669,4 +669,262 @@ After all tasks complete:
 
 ---
 
+## Phase 5: AI Interpretation Improvements
+
+### Task 9: Cross-Reference Detection
+
+**Status:** In Progress
+
+### Objective
+Detect when changes across multiple files are related and consolidate them into single, meaningful changelog entries. For example, changes in `auth.py`, `login.tsx`, and `auth_middleware.py` should become one entry: "Improved login security" rather than three separate entries.
+
+### Problem Statement
+Currently, the skill processes each commit and file independently. This leads to:
+- Fragmented changelog entries (3 entries for one logical change)
+- Missing context (can't see that UI + backend + middleware = "new feature")
+- Redundant descriptions ("Updated auth" appears multiple times)
+
+### Solution: Semantic File Grouping
+
+#### 1. File Relationship Patterns
+Define relationships between files that typically change together:
+
+```yaml
+# config.yaml additions
+file_relationships:
+  # Feature areas - files that typically change together
+  areas:
+    authentication:
+      patterns:
+        - "**/auth/**"
+        - "**/login/**"
+        - "**/session/**"
+        - "**/*auth*"
+        - "**/*login*"
+      consolidation_phrase: "authentication"
+
+    user_interface:
+      patterns:
+        - "**/*.tsx"
+        - "**/*.jsx"
+        - "**/*.vue"
+        - "**/*.css"
+        - "**/*.scss"
+      consolidation_phrase: "user interface"
+
+    api_endpoints:
+      patterns:
+        - "**/routes/**"
+        - "**/api/**"
+        - "**/controllers/**"
+        - "**/handlers/**"
+      consolidation_phrase: "API"
+
+    database:
+      patterns:
+        - "**/models/**"
+        - "**/migrations/**"
+        - "**/schema/**"
+        - "**/*repository*"
+      consolidation_phrase: "data handling"
+
+    configuration:
+      patterns:
+        - "**/*.yaml"
+        - "**/*.yml"
+        - "**/*.json"
+        - "**/*.toml"
+        - "**/*.ini"
+        - "**/.env*"
+      consolidation_phrase: "configuration"
+
+  # Cross-layer detection (when multiple layers change = likely new feature)
+  feature_indicators:
+    - count: 3  # If 3+ areas change in one commit
+      category: "feature"
+      description_template: "Added new {primary_area} feature"
+```
+
+#### 2. Semantic Analyzer Module
+
+Create `semantic_analyzer.py`:
+
+```python
+class SemanticAnalyzer:
+    """
+    Analyzes file changes to detect semantic relationships.
+
+    Responsibilities:
+    - Group related file changes
+    - Detect feature-level changes spanning multiple areas
+    - Suggest consolidated descriptions
+    - Identify primary change area
+    """
+
+    def analyze_commit(self, files_changed: List[Dict]) -> Dict:
+        """
+        Analyze files changed in a commit to detect relationships.
+
+        Returns:
+            {
+                'areas': ['authentication', 'user_interface'],
+                'primary_area': 'authentication',
+                'is_feature': True,
+                'suggested_description': 'Added new authentication feature',
+                'confidence': 0.85
+            }
+        """
+
+    def group_related_changes(self, changes: List[Dict]) -> List[Dict]:
+        """
+        Group multiple change entries that are semantically related.
+
+        Example:
+            Input: [
+                {'desc': 'Updated login form', 'files': ['login.tsx']},
+                {'desc': 'Added auth middleware', 'files': ['auth.py']},
+                {'desc': 'Updated session handling', 'files': ['session.py']}
+            ]
+            Output: [
+                {'desc': 'Improved authentication system',
+                 'source_count': 3,
+                 'confidence': 'high'}
+            ]
+        """
+
+    def detect_feature_boundary(self, commits: List[Dict]) -> List[Dict]:
+        """
+        Detect when multiple commits form a single feature.
+
+        Looks for patterns like:
+        - "Add X" followed by "Fix X" followed by "Improve X"
+        - Multiple commits touching same file areas
+        """
+```
+
+#### 3. Integration with Consolidator
+
+Update `change_consolidator.py` to use semantic analysis:
+
+```python
+class ChangeConsolidator:
+    def __init__(self):
+        self.semantic_analyzer = SemanticAnalyzer()
+
+    def consolidate(self, all_changes):
+        # Step 1: Existing deduplication
+        unique_changes = self._remove_duplicates(all_changes)
+
+        # Step 2: NEW - Semantic grouping
+        semantically_grouped = self.semantic_analyzer.group_related_changes(unique_changes)
+
+        # Step 3: Existing similarity merge
+        merged_changes = self._merge_similar(semantically_grouped)
+
+        # ... rest of pipeline
+```
+
+### Implementation Steps
+
+1. **Create semantic_analyzer.py**:
+   - File pattern matching using glob/fnmatch
+   - Area detection from file paths
+   - Relationship scoring algorithm
+   - Consolidation phrase generation
+
+2. **Update config.yaml**:
+   - Add `file_relationships` section
+   - Define default areas and patterns
+   - Add feature indicator thresholds
+
+3. **Update change_consolidator.py**:
+   - Integrate SemanticAnalyzer
+   - Add semantic grouping step
+   - Preserve original entries for audit
+
+4. **Add tests**:
+   - Test area detection
+   - Test multi-file grouping
+   - Test feature detection
+
+### Example Transformations
+
+**Before (current behavior):**
+```markdown
+## New Features
+- Updated authentication API
+- Added login form validation
+- Created session middleware
+
+## Enhancements
+- Improved error messages in auth
+```
+
+**After (with cross-reference detection):**
+```markdown
+## New Features
+- Improved authentication system with better validation and error handling
+```
+
+### Files to Create
+- `semantic_analyzer.py`
+
+### Files to Modify
+- `config.yaml` (add file_relationships)
+- `change_consolidator.py` (integrate semantic analyzer)
+- `tests/test_changelog.py` (add semantic tests)
+
+### Acceptance Criteria
+- [ ] Files in same area are grouped together
+- [ ] Multi-area commits suggest feature-level changes
+- [ ] Consolidated descriptions are meaningful
+- [ ] Original entries preserved for debugging
+- [ ] Configurable via config.yaml
+- [ ] All tests pass
+
+---
+
+## Updated Implementation Order
+
+```
+Phase 1: Foundation ✅ COMPLETE
+├── Task 3: Config file
+└── Task 1: Output file organization
+
+Phase 2: Core Features ✅ COMPLETE
+├── Task 2: Main entry point
+└── Task 4: AI interpretation
+
+Phase 3: User Experience ✅ COMPLETE
+├── Task 5: Append to changelog
+└── Task 6: Preview mode
+
+Phase 4: Automation & Quality ✅ COMPLETE
+├── Task 7: Git tag hook
+└── Task 8: Test suite
+
+Phase 5: AI Improvements 🔄 IN PROGRESS
+└── Task 9: Cross-Reference Detection
+```
+
+---
+
+## Updated Estimated Effort
+
+| Task | Estimated Time | Complexity | Status |
+|------|----------------|------------|--------|
+| Task 1: Output organization | 30 min | Low | ✅ Complete |
+| Task 2: Main entry point | 1 hour | Medium | ✅ Complete |
+| Task 3: Config file | 1 hour | Medium | ✅ Complete |
+| Task 4: AI interpretation | 1 hour | Medium | ✅ Complete |
+| Task 5: Append changelog | 45 min | Medium | ✅ Complete |
+| Task 6: Preview mode | 1.5 hours | High | ✅ Complete |
+| Task 7: Git tag hook | 45 min | Medium | ✅ Complete |
+| Task 8: Test suite | 2 hours | High | ✅ Complete |
+| Task 9: Cross-Reference Detection | 2 hours | High | 🔄 In Progress |
+| **Total** | **~11 hours** | | |
+
+---
+
+*Document updated: 2024-12-25*
 *Document created for AIskils/repo-changelog skill enhancement*

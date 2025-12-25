@@ -4,6 +4,7 @@ Merges related changes, eliminates flip-flop changes (net-zero),
 and produces a clean list of actual changes for the changelog.
 
 Now uses config.yaml for customizable thresholds and settings.
+Includes semantic analysis for cross-reference detection.
 """
 
 import re
@@ -17,6 +18,15 @@ try:
 except ImportError:
     from config_loader import get_config
 
+# Import semantic analyzer for cross-reference detection
+try:
+    from .semantic_analyzer import SemanticAnalyzer
+except ImportError:
+    try:
+        from semantic_analyzer import SemanticAnalyzer
+    except ImportError:
+        SemanticAnalyzer = None  # Graceful fallback
+
 
 class ChangeConsolidator:
     """
@@ -26,6 +36,7 @@ class ChangeConsolidator:
     - Detect and eliminate flip-flop changes (changed and then changed back)
     - Merge related changes into single descriptions
     - Deduplicate similar changes
+    - Cross-reference detection to group related file changes
     - Focus on end result, not intermediate steps
 
     All settings configurable via config.yaml.
@@ -39,6 +50,7 @@ class ChangeConsolidator:
             config_path: Optional path to custom config file
         """
         self.config = get_config(config_path)
+        self.config_path = config_path
         self.tracked_items: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
 
         # Load settings from config
@@ -54,6 +66,17 @@ class ChangeConsolidator:
         self.min_confidence = self.config.get(
             'consolidation', 'min_confidence', default='low'
         )
+
+        # Semantic analysis settings
+        self.use_semantic_grouping = self.config.get(
+            'file_relationships', 'enabled', default=True
+        )
+
+        # Initialize semantic analyzer if available
+        if SemanticAnalyzer and self.use_semantic_grouping:
+            self.semantic_analyzer = SemanticAnalyzer(config_path)
+        else:
+            self.semantic_analyzer = None
 
     def consolidate(self, all_changes: List[Dict[str, Any]],
                     initial_state: Optional[Dict[str, Any]] = None,
@@ -75,22 +98,28 @@ class ChangeConsolidator:
         # Step 1: Remove exact duplicates
         unique_changes = self._remove_duplicates(all_changes)
 
-        # Step 2: Merge similar changes (if enabled in config)
-        if self.merge_similar:
-            merged_changes = self._merge_similar(unique_changes)
+        # Step 2: Semantic grouping - group related file changes (NEW)
+        if self.semantic_analyzer:
+            semantically_grouped = self.semantic_analyzer.group_related_changes(unique_changes)
         else:
-            merged_changes = unique_changes
+            semantically_grouped = unique_changes
 
-        # Step 3: Detect and remove flip-flop changes (if enabled in config)
+        # Step 3: Merge similar changes (if enabled in config)
+        if self.merge_similar:
+            merged_changes = self._merge_similar(semantically_grouped)
+        else:
+            merged_changes = semantically_grouped
+
+        # Step 4: Detect and remove flip-flop changes (if enabled in config)
         if self.remove_flipflops:
             net_changes = self._remove_flipflops_logic(merged_changes, initial_state, final_state)
         else:
             net_changes = merged_changes
 
-        # Step 4: Filter out low-confidence or irrelevant changes
+        # Step 5: Filter out low-confidence or irrelevant changes
         filtered_changes = self._filter_changes(net_changes)
 
-        # Step 5: Sort by category and confidence
+        # Step 6: Sort by category and confidence
         sorted_changes = self._sort_changes(filtered_changes)
 
         return sorted_changes

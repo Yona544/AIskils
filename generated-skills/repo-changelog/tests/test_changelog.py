@@ -19,6 +19,7 @@ from change_consolidator import ChangeConsolidator
 from changelog_formatter import ChangelogFormatter
 from breaking_change_detector import BreakingChangeDetector
 from ai_interpreter import AIInterpreter, MockAIClient
+from semantic_analyzer import SemanticAnalyzer
 
 
 class TestConfigLoader(unittest.TestCase):
@@ -274,6 +275,94 @@ class TestAIInterpreter(unittest.TestCase):
         result = self.interpreter._prepare_diff(large_diff)
         self.assertLess(len(result), 6000)
         self.assertIn('truncated', result.lower())
+
+
+class TestSemanticAnalyzer(unittest.TestCase):
+    """Test semantic analysis and cross-reference detection."""
+
+    def setUp(self):
+        self.analyzer = SemanticAnalyzer()
+
+    def test_detect_auth_area(self):
+        """Should detect authentication area from file paths."""
+        files = [{'path': 'src/auth/login.py', 'status': 'modified'}]
+        result = self.analyzer.analyze_commit(files)
+        self.assertIn('authentication', result['areas'])
+
+    def test_detect_ui_area(self):
+        """Should detect user interface area from file paths."""
+        files = [{'path': 'components/Button.tsx', 'status': 'added'}]
+        result = self.analyzer.analyze_commit(files)
+        self.assertIn('user_interface', result['areas'])
+
+    def test_detect_multiple_areas(self):
+        """Should detect multiple areas when files span areas."""
+        files = [
+            {'path': 'src/auth/login.tsx', 'status': 'modified'},
+            {'path': 'src/models/user.py', 'status': 'modified'},
+            {'path': 'src/routes/auth.py', 'status': 'added'}
+        ]
+        result = self.analyzer.analyze_commit(files)
+        self.assertGreaterEqual(len(result['areas']), 2)
+        self.assertTrue(result['is_feature'])
+
+    def test_primary_area_detection(self):
+        """Should identify primary area based on file count."""
+        files = [
+            {'path': 'src/auth/login.py', 'status': 'modified'},
+            {'path': 'src/auth/logout.py', 'status': 'modified'},
+            {'path': 'src/components/Header.tsx', 'status': 'modified'}
+        ]
+        result = self.analyzer.analyze_commit(files)
+        self.assertEqual(result['primary_area'], 'authentication')
+
+    def test_consolidation_phrase(self):
+        """Should return appropriate consolidation phrase."""
+        phrase = self.analyzer._get_consolidation_phrase('authentication')
+        self.assertEqual(phrase, 'authentication')
+
+        phrase = self.analyzer._get_consolidation_phrase('database')
+        self.assertEqual(phrase, 'data handling')
+
+    def test_group_related_changes(self):
+        """Should group changes by area."""
+        changes = [
+            {'description': 'Updated login', 'files_changed': [
+                {'path': 'src/auth/login.py', 'status': 'modified'}
+            ]},
+            {'description': 'Fixed session', 'files_changed': [
+                {'path': 'src/auth/session.py', 'status': 'modified'}
+            ]},
+            {'description': 'Updated button', 'files_changed': [
+                {'path': 'src/components/Button.tsx', 'status': 'modified'}
+            ]}
+        ]
+        result = self.analyzer.group_related_changes(changes)
+        # Auth changes should be grouped, button stays separate
+        self.assertLessEqual(len(result), len(changes))
+
+    def test_empty_files(self):
+        """Should handle empty file list gracefully."""
+        result = self.analyzer.analyze_commit([])
+        self.assertEqual(result['areas'], [])
+        self.assertIsNone(result['primary_area'])
+        self.assertFalse(result['is_feature'])
+
+    def test_unknown_file_type(self):
+        """Should handle unknown file types gracefully."""
+        files = [{'path': 'random/file.xyz', 'status': 'added'}]
+        result = self.analyzer.analyze_commit(files)
+        # Should not crash, may return empty areas
+        self.assertIsInstance(result['areas'], list)
+
+    def test_area_summary(self):
+        """Should generate readable area summary."""
+        files = [
+            {'path': 'src/auth/login.py', 'status': 'modified'},
+            {'path': 'src/api/routes.py', 'status': 'modified'}
+        ]
+        summary = self.analyzer.get_area_summary(files)
+        self.assertIn('authentication', summary.lower())
 
 
 class TestIntegration(unittest.TestCase):

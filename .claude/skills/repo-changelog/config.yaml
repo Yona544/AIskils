@@ -324,3 +324,117 @@ logging:
 
   # Include timestamps in logs
   include_timestamps: true
+
+# =============================================================================
+# FILE RELATIONSHIPS (Cross-Reference Detection)
+# =============================================================================
+file_relationships:
+  # Enable semantic grouping of related file changes
+  enabled: true
+
+  # Minimum number of files to trigger grouping
+  min_files_for_grouping: 2
+
+  # Feature areas - files that typically change together
+  areas:
+    authentication:
+      patterns:
+        - "**/auth/**"
+        - "**/login/**"
+        - "**/session/**"
+        - "**/*auth*"
+        - "**/*login*"
+        - "**/*session*"
+        - "**/signin/**"
+        - "**/signup/**"
+      consolidation_phrase: "authentication"
+      priority: 1
+
+    user_interface:
+      patterns:
+        - "**/*.tsx"
+        - "**/*.jsx"
+        - "**/*.vue"
+        - "**/*.svelte"
+        - "**/*.css"
+        - "**/*.scss"
+        - "**/*.less"
+        - "**/components/**"
+        - "**/pages/**"
+        - "**/views/**"
+        - "**/ui/**"
+        - "**/frontend/**"
+      consolidation_phrase: "user interface"
+      priority: 2
+
+    api_endpoints:
+      patterns:
+        - "**/routes/**"
+        - "**/api/**"
+        - "**/controllers/**"
+        - "**/handlers/**"
+        - "**/endpoints/**"
+        - "**/*route*"
+        - "**/*controller*"
+        - "**/*handler*"
+      consolidation_phrase: "API"
+      priority: 1
+
+    database:
+      patterns:
+        - "**/models/**"
+        - "**/migrations/**"
+        - "**/schema/**"
+        - "**/*repository*"
+        - "**/*model*"
+        - "**/*entity*"
+        - "**/*.sql"
+        - "**/db/**"
+      consolidation_phrase: "data handling"
+      priority: 1
+
+    configuration:
+      patterns:
+        - "**/*.yaml"
+        - "**/*.yml"
+        - "**/*.json"
+        - "**/*.toml"
+        - "**/*.ini"
+        - "**/.env*"
+        - "**/config/**"
+        - "**/*config*"
+        - "**/*settings*"
+      consolidation_phrase: "configuration"
+      priority: 3
+
+    testing:
+      patterns:
+        - "**/test/**"
+        - "**/tests/**"
+        - "**/spec/**"
+        - "**/*test*"
+        - "**/*spec*"
+        - "**/__tests__/**"
+      consolidation_phrase: "testing"
+      priority: 4
+
+    documentation:
+      patterns:
+        - "**/*.md"
+        - "**/*.rst"
+        - "**/*.txt"
+        - "**/docs/**"
+        - "**/documentation/**"
+        - "**/README*"
+        - "**/CHANGELOG*"
+      consolidation_phrase: "documentation"
+      priority: 5
+
+  # Feature indicators - when multiple areas change together
+  feature_indicators:
+    - min_areas: 3
+      category: "feature"
+      template: "Added new {primary} feature"
+    - min_areas: 2
+      category: "enhancement"
+      template: "Improved {primary}"
