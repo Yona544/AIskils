@@ -1,9 +1,11 @@
 {
-  "repo_path": "/home/user/my-project",
-  "since_tag": "v1.2.0",
-  "max_commits": 20,
-  "group_by_type": true,
+  "repo_path": "C:\\Projects\\MyApp",
+  "from_tag": "v1.0.0",
+  "to_tag": "v1.1.0",
   "output_format": "markdown",
-  "include_emoji": true,
-  "include_links": true
+  "slack_ready": false,
+  "footnotes": [
+    "Dark mode requires display driver update on Windows 7",
+    "PDF export needs Adobe Reader installed"
+  ]
 }

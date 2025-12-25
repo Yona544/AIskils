@@ -1,97 +1,60 @@
 {
-  "metadata": {
-    "repository": "/home/user/my-project",
-    "analysis_type": "since_tag",
-    "reference": "v1.2.0",
-    "commits_analyzed": 18
-  },
-  "summary": {
-    "total_commits": 18,
-    "by_type": {
-      "feat": {
-        "count": 7,
-        "label": "Features",
-        "emoji": "✨"
+  "success": true,
+  "version": "v1.1.0",
+  "release_date": "2024-12-25",
+  "grouped_changes": {
+    "feature": [
+      {
+        "description": "Added dark mode toggle in settings",
+        "category": "feature",
+        "confidence": "high"
       },
-      "fix": {
-        "count": 5,
-        "label": "Bug Fixes",
-        "emoji": "🐛"
-      },
-      "docs": {
-        "count": 3,
-        "label": "Documentation",
-        "emoji": "📝"
-      },
-      "refactor": {
-        "count": 2,
-        "label": "Refactoring",
-        "emoji": "♻️"
-      },
-      "test": {
-        "count": 1,
-        "label": "Tests",
-        "emoji": "✅"
+      {
+        "description": "New export to PDF option in reports",
+        "category": "feature",
+        "confidence": "high"
       }
-    },
-    "breaking_changes": [],
-    "conventional_percentage": 100.0
-  },
-  "statistics": {
-    "total_commits": 18,
-    "contributors": [
-      "John Doe <john@example.com>",
-      "Jane Smith <jane@example.com>"
     ],
-    "contributor_count": 2,
-    "date_range": {
-      "oldest": "2024-10-15 14:23:11 +0000",
-      "newest": "2024-12-20 09:15:33 +0000"
-    },
-    "total_files_changed": 47,
-    "remote_url": "https://github.com/example/my-project"
+    "enhancement": [
+      {
+        "description": "Improved loading speed when opening large files",
+        "category": "enhancement",
+        "confidence": "medium"
+      },
+      {
+        "description": "Search now finds partial matches",
+        "category": "enhancement",
+        "confidence": "medium"
+      }
+    ],
+    "bugfix": [
+      {
+        "description": "Fixed issue where login would fail on slow connections",
+        "category": "bugfix",
+        "confidence": "high"
+      },
+      {
+        "description": "Resolved crash when uploading files over 10MB",
+        "category": "bugfix",
+        "confidence": "high"
+      }
+    ],
+    "change": [
+      {
+        "description": "Settings menu has been reorganized for clarity",
+        "category": "change",
+        "confidence": "medium"
+      }
+    ],
+    "breaking": [
+      {
+        "description": "Database format updated - run migration tool before upgrading",
+        "category": "breaking",
+        "confidence": "high"
+      }
+    ]
   },
-  "changes": [
-    {
-      "type": "feat",
-      "label": "Features",
-      "emoji": "✨",
-      "count": 7,
-      "commits": [
-        {
-          "hash": "abc123def456...",
-          "short_hash": "abc123d",
-          "author": "John Doe",
-          "email": "john@example.com",
-          "date": "2024-12-20 09:15:33 +0000",
-          "message": "Add user authentication system",
-          "scope": "auth",
-          "is_breaking": false,
-          "files_changed": 8,
-          "url": "https://github.com/example/my-project/commit/abc123def456..."
-        }
-      ]
-    },
-    {
-      "type": "fix",
-      "label": "Bug Fixes",
-      "emoji": "🐛",
-      "count": 5,
-      "commits": [
-        {
-          "hash": "def789ghi012...",
-          "short_hash": "def789g",
-          "author": "Jane Smith",
-          "email": "jane@example.com",
-          "date": "2024-12-18 16:42:21 +0000",
-          "message": "Resolve memory leak in data processing",
-          "scope": "core",
-          "is_breaking": false,
-          "files_changed": 3,
-          "url": "https://github.com/example/my-project/commit/def789ghi012..."
-        }
-      ]
-    }
-  ],
-  "markdown_output": "# Changelog\n\n## Summary\n\n**Total Commits**: 18\n**Date Range**: 2024-12-20 09:15:33 +0000 to 2024-10-15 14:23:11 +0000\n**Contributors**: 2\n**Conventional Commits**: 100.0%\n\n### Changes by Type\n\n- ✨ **Features**: 7\n- 🐛 **Bug Fixes**: 5\n- 📝 **Documentation**: 3\n- ♻️ **Refactoring**: 2\n- ✅ **Tests**: 1\n\n## Changes\n\n### ✨ Features (7)\n\n*New functionality added*\n\n- [`abc123d`](https://github.com/example/my-project/commit/abc123def456...) **auth**: Add user authentication system (*John Doe*, 2024-12-20)\n\n### 🐛 Bug Fixes (5)\n\n*Issues resolved*\n\n- [`def789g`](https://github.com/example/my-project/commit/def789ghi012...) **core**: Resolve memory leak in data processing (*Jane Smith*, 2024-12-18)\n"
+  "markdown_output": "# Release Notes - v1.1.0\n\n*Released: 2024-12-25*\n\n## Breaking Changes\n- Database format updated - run migration tool before upgrading\n\n## New Features\n- Added dark mode toggle in settings\n- New export to PDF option in reports\n\n## Enhancements\n- Improved loading speed when opening large files\n- Search now finds partial matches\n\n## Bug Fixes\n- Fixed issue where login would fail on slow connections\n- Resolved crash when uploading files over 10MB\n\n## Changes\n- Settings menu has been reorganized for clarity\n\n---\n\n**Notes:**\n- Dark mode requires display driver update on Windows 7\n- PDF export needs Adobe Reader installed",
+  "slack_output": "*Release v1.1.0 is now available!*\n\n*Breaking Changes*\n• Database format updated - run migration tool before upgrading\n\n*New Features*\n• Added dark mode toggle in settings\n• New export to PDF option in reports\n\n*Enhancements*\n• Improved loading speed when opening large files\n• Search now finds partial matches\n\n*Bug Fixes*\n• Fixed issue where login would fail on slow connections\n• Resolved crash when uploading files over 10MB",
+  "output_file": "RELEASE_NOTES_v1.1.0.md"
 }

@@ -1,124 +1,175 @@
 ---
 name: repo-changelog
-description: Analyzes git repositories to present commit history in a user-friendly format with intelligent grouping by type and customizable filtering
+description: Generates end-user friendly release notes and changelogs by analyzing git diffs, consolidating changes, and formatting for Slack and documentation
 ---
 
-# Repository Changelog Analyzer
+# Release Notes & Changelog Generator
 
-This skill provides intelligent analysis of git repository commit history, transforming raw git logs into user-friendly, categorized summaries that help teams understand what changed in their codebase.
+This skill analyzes git repositories to generate **end-user friendly** release notes and changelogs. It reads actual code diffs (not just commit messages), understands what changed, consolidates related changes, and produces clean markdown suitable for Slack updates and program documentation.
+
+## Key Differentiators
+
+- **Diff-Based Analysis**: Reads actual code changes, not just commit messages
+- **End-User Focus**: No technical jargon, functions, or variables in output
+- **Smart Consolidation**: If something changed back and forth with no net result, it's not mentioned
+- **Final State Only**: Shows what the end result is, not intermediate steps
+- **Breaking Change Detection**: Automatically flags breaking changes from commits and diffs
+- **Cross-Platform**: Works on Windows, macOS, and Linux
+- **Multi-Remote Support**: GitHub, Bitbucket, and local git repositories
 
 ## Capabilities
 
-- **Tag-Based Analysis**: Show all commits since a specific git tag (e.g., "show me what changed since v1.2.0")
-- **Recent Commit Analysis**: Display the last N commits with customizable count (default: 15)
-- **Conventional Commit Parsing**: Automatically detects and groups commits following conventional commit standards
-- **Smart Categorization**: Groups changes by type (features, fixes, refactors, docs, tests, etc.)
-- **User-Friendly Formatting**: Presents commits in readable format with clear summaries
-- **Commit Links**: Generates links to specific commits (when repository URL is available)
-- **Statistical Summary**: Provides overview metrics (total commits, changes by type, contributors)
-- **Flexible Input**: Works with any git repository path or current directory
+- **Tag-to-Tag Analysis**: Generate notes between any two release tags (e.g., v1.0.0 to v1.1.0)
+- **Since-Last-Tag**: Automatically detect last tag and show changes since then
+- **Recent Commits**: Analyze last N commits for quick updates
+- **Full Diff Reading**: Understand actual code changes, not vague commit messages
+- **Change Consolidation**: Merge related changes, eliminate flip-flop changes
+- **Category Bucketing**: Organize into Features, Enhancements, Bug Fixes, Changes, Breaking Changes, Others
+- **Slack-Ready Output**: Formatted markdown with bullet points and optional footnotes
+- **Footnotes Support**: Add setup notes or important info without exposing secrets
+
+## Output Categories
+
+Changes are organized into these buckets:
+
+| Category | Description | When Used |
+|----------|-------------|-----------|
+| **New Features** | Brand new functionality | New screens, new buttons, new capabilities |
+| **Enhancements** | Improvements to existing features | Faster, better, more options |
+| **Bug Fixes** | Issues that were resolved | Things that weren't working now work |
+| **Changes** | Modifications to behavior | Something works differently now |
+| **Breaking Changes** | Changes requiring user action | Must update settings, data migration needed |
+| **Others** | Miscellaneous updates | Documentation, internal improvements users might notice |
 
 ## Input Requirements
 
-The skill accepts the following inputs:
+The skill needs:
 
-- **Repository Path** (optional): Absolute path to git repository (defaults to current directory)
-- **Tag Name** (optional): Git tag to start analysis from (e.g., "v1.2.0", "release-2024-01")
-- **Commit Count** (optional): Number of recent commits to analyze (default: 15, max: 100)
-- **Group by Type** (optional): Enable/disable grouping by conventional commit types (default: enabled)
-- **Include Links** (optional): Generate commit URLs if remote repository configured (default: enabled)
+1. **Repository Path** (optional): Defaults to current directory
+2. **Range Specification** (one of):
+   - `from_tag` and `to_tag`: Compare between two tags
+   - `since_tag`: Everything since a specific tag to HEAD
+   - `last_n_commits`: Analyze recent N commits (default: 50)
+3. **Remote Type** (optional): `github`, `bitbucket`, or `local` (auto-detected)
 
-**Formats Accepted**:
-- Natural language request: "Show me what changed since v1.2.0"
-- JSON input with structured parameters
-- Command-line style: `--since v1.2.0 --count 20 --path /path/to/repo`
+**Input Formats Accepted**:
 
-## Output Formats
+Natural language:
+- "Generate release notes from v1.0.0 to v1.1.0"
+- "What changed since the last release?"
+- "Show me what's new in the last 30 commits"
 
-The skill produces:
-
-1. **Summary Statistics**:
-   - Total commits analyzed
-   - Date range covered
-   - Number of contributors
-   - Changes breakdown by type
-
-2. **Grouped Changelog**:
-   - **Features** (feat): New functionality added
-   - **Bug Fixes** (fix): Issues resolved
-   - **Refactoring** (refactor): Code improvements without feature changes
-   - **Documentation** (docs): Documentation updates
-   - **Tests** (test): Test additions or modifications
-   - **Chores** (chore): Maintenance tasks
-   - **Other**: Commits not following conventional format
-
-3. **Commit Details**:
-   - Commit hash (short format)
-   - Author and date
-   - Commit message (cleaned and formatted)
-   - Link to commit (if available)
-   - Files changed count
-
-4. **Export Formats**:
-   - Markdown (default)
-   - JSON (for programmatic use)
-   - Plain text (for simple output)
-
-## How to Use
-
-**Natural Language Examples**:
-- "Show me what changed since v1.2.0"
-- "Give me the last 20 commits in this repository"
-- "Analyze commits since tag release-2024-01 and group them by type"
-- "What's new in /path/to/my-project since v2.0.0?"
-
-**Structured Request**:
+Structured JSON:
 ```json
 {
-  "repo_path": "/home/user/my-project",
-  "since_tag": "v1.2.0",
-  "max_commits": 25,
-  "group_by_type": true
+  "repo_path": "C:\\Projects\\MyApp",
+  "from_tag": "v1.0.0",
+  "to_tag": "v1.1.0"
 }
 ```
 
+## Output Format
+
+Markdown file with this structure:
+
+```markdown
+# Release Notes - v1.1.0
+
+## New Features
+- Added dark mode toggle in settings
+- New export to PDF option in reports
+
+## Enhancements
+- Improved loading speed when opening large files
+- Search now finds partial matches
+
+## Bug Fixes
+- Fixed issue where login would fail on slow connections
+- Resolved crash when uploading files over 10MB
+
+## Changes
+- Settings menu has been reorganized for clarity
+- Default file format changed from CSV to Excel
+
+## Breaking Changes
+- Database format updated - run migration tool before upgrading
+
+---
+
+**Notes:**
+- Dark mode requires display driver update on Windows 7
+- PDF export needs Adobe Reader installed
+```
+
+## How the Analysis Works
+
+### Step 1: Gather Commits
+Collects all commits in the specified range from the git repository.
+
+### Step 2: Read Full Diffs
+For each commit, reads the actual code changes (additions, deletions, modifications).
+
+### Step 3: Interpret Changes
+Translates technical changes into plain English descriptions:
+- `+ showWelcomeMessage = true` → "Welcome message now displays when app starts"
+- Deleted login retry logic → "Removed automatic login retry"
+
+### Step 4: Consolidate Changes
+Groups related changes and eliminates noise:
+- If a feature was added then removed, it's not mentioned
+- If a value changed multiple times, only the final state matters
+- Related commits are merged into single descriptions
+
+### Step 5: Categorize
+Assigns each change to the appropriate bucket based on:
+- Commit message keywords (feat, fix, enhancement, etc.)
+- Type of code change (new files = feature, deleted code = removal)
+- Breaking change indicators
+
+### Step 6: Format Output
+Generates clean markdown with:
+- Clear category headings
+- Brief bullet points
+- Optional footnotes for important notes
+- No technical details, secrets, or jargon
+
 ## Scripts
 
-- `analyze_commits.py`: Main git analysis engine that parses commit history
-- `categorize_commits.py`: Conventional commit parser and categorization logic
-- `format_changelog.py`: Output formatting and presentation layer
+- `git_analyzer.py`: Cross-platform git operations (Windows/macOS/Linux compatible)
+- `diff_parser.py`: Reads and interprets code diffs in plain English
+- `change_consolidator.py`: Merges related changes, detects net-zero changes
+- `changelog_formatter.py`: Generates Slack-ready markdown output
+- `breaking_change_detector.py`: Identifies breaking changes from commits and diffs
 
 ## Best Practices
 
-1. **Use Conventional Commits**: For best results, follow conventional commit format in your repository
-2. **Specify Tags Clearly**: Use exact tag names (case-sensitive)
-3. **Set Reasonable Limits**: For large repositories, start with smaller commit counts (15-25)
-4. **Include Repository URL**: Configure remote URL for automatic commit links
-5. **Regular Analysis**: Run after each release or sprint to track progress
-6. **Combine Outputs**: Use JSON output for further processing or integration
+1. **Use Meaningful Tags**: Tag releases with semantic versions (v1.0.0, v1.1.0)
+2. **Run Before Release**: Generate notes as part of your release process
+3. **Review Output**: AI interpretation is good but human review ensures accuracy
+4. **Add Footnotes**: Use the notes section for setup instructions or warnings
+5. **Keep It Brief**: Bullet points should be one line each
+6. **No Secrets**: Never include passwords, API keys, or internal URLs in notes
 
 ## Limitations
 
-- **Git Repository Required**: Only works with valid git repositories
+- **Requires Git Repository**: Only works with valid git repos
 - **Tag Must Exist**: Specified tags must exist in the repository
-- **Conventional Commits Optional**: Works without conventional commits but grouping is less meaningful
-- **Performance**: Very large commit histories (>1000 commits) may take longer to process
-- **Remote URL**: Commit links only work if git remote is configured
-- **Merge Commits**: Complex merge commits may appear ungrouped
-- **Date Ranges**: Currently supports tag-based or count-based filtering, not arbitrary date ranges
+- **Diff Size Limits**: Very large diffs (1000+ files) may be summarized
+- **Language Detection**: Best results with common programming languages
+- **Interpretation Accuracy**: Complex changes may need human refinement
+- **No Real-Time**: Analyzes existing commits, not live changes
 
 ## When to Use This Skill
 
-**Perfect for**:
-- Release note generation
-- Sprint retrospectives
-- Change documentation
-- Code review preparation
-- Understanding recent repository activity
-- Tracking feature development
+**Perfect for:**
+- Release announcements to support teams (Slack)
+- Customer-facing changelog updates
+- Sprint review summaries
+- Version upgrade documentation
+- Non-technical stakeholder updates
 
-**Not Ideal for**:
-- Real-time git monitoring
-- Detailed code diff analysis
-- Git repository management/modification
-- Automated deployment decisions
+**Not Ideal for:**
+- Technical developer documentation
+- Detailed code review
+- Security audit reports
+- Debugging commit history
