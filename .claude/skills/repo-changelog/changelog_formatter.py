@@ -2,61 +2,57 @@
 Changelog formatter module.
 Generates Slack-ready markdown output with proper headings,
 bullet points, and optional footnotes.
+
+Now uses config.yaml for all customizable settings.
+Outputs to RELEASE_NOTES folder with timestamps.
 """
 
 import re
+import os
 from typing import Dict, List, Any, Optional
 from datetime import datetime
+from pathlib import Path
+
+# Import config loader
+try:
+    from .config_loader import get_config
+except ImportError:
+    from config_loader import get_config
 
 
 class ChangelogFormatter:
     """
     Formats consolidated changes into clean markdown for Slack and documentation.
 
-    Output format:
-    - Category headings (New Features, Enhancements, Bug Fixes, etc.)
+    Features:
+    - Category headings from config (New Features, Enhancements, Bug Fixes, etc.)
     - Brief bullet points
     - Optional footnotes for important notes
     - No technical jargon or secrets
+    - Outputs to RELEASE_NOTES folder with timestamps
+    - Configurable via config.yaml
     """
 
-    # Category display configuration
-    CATEGORY_CONFIG = {
-        'feature': {
-            'heading': 'New Features',
-            'emoji': '',  # No emoji as per user preference
-            'order': 1
-        },
-        'enhancement': {
-            'heading': 'Enhancements',
-            'emoji': '',
-            'order': 2
-        },
-        'bugfix': {
-            'heading': 'Bug Fixes',
-            'emoji': '',
-            'order': 3
-        },
-        'change': {
-            'heading': 'Changes',
-            'emoji': '',
-            'order': 4
-        },
-        'breaking': {
-            'heading': 'Breaking Changes',
-            'emoji': '',
-            'order': 0  # Breaking changes first
-        },
-        'other': {
-            'heading': 'Other Updates',
-            'emoji': '',
-            'order': 5
-        }
-    }
+    def __init__(self, config_path: Optional[str] = None):
+        """
+        Initialize the formatter.
 
-    def __init__(self):
-        """Initialize the formatter."""
+        Args:
+            config_path: Optional path to custom config file
+        """
+        self.config = get_config(config_path)
         self.footnotes: List[str] = []
+
+    def _get_category_config(self, category: str) -> Dict[str, Any]:
+        """Get configuration for a category from config."""
+        return self.config.get_category_config(category)
+
+    def _get_sorted_categories(self, categories: List[str]) -> List[str]:
+        """Sort categories by their configured order."""
+        return sorted(
+            categories,
+            key=lambda c: self._get_category_config(c).get('order', 99)
+        )
 
     def format_changelog(self, grouped_changes: Dict[str, List[Dict[str, Any]]],
                          version: Optional[str] = None,
@@ -82,14 +78,17 @@ class ChangelogFormatter:
             lines.append(header)
             lines.append('')
 
-        # Sort categories by order
-        sorted_categories = sorted(
-            grouped_changes.keys(),
-            key=lambda c: self.CATEGORY_CONFIG.get(c, {}).get('order', 99)
-        )
+        # Sort categories by order from config
+        sorted_categories = self._get_sorted_categories(list(grouped_changes.keys()))
+
+        # Check for excluded categories
+        exclude = self.config.get('filters', 'exclude_categories', default=[])
 
         # Format each category
         for category in sorted_categories:
+            if category in exclude:
+                continue
+
             changes = grouped_changes.get(category, [])
             if not changes:
                 continue
@@ -114,37 +113,43 @@ class ChangelogFormatter:
         else:
             header = "# Release Notes"
 
-        if release_date:
-            header += f"\n\n*Released: {release_date}*"
-        else:
-            today = datetime.now().strftime("%Y-%m-%d")
-            header += f"\n\n*Released: {today}*"
+        include_date = self.config.get('output', 'include_date_header', default=True)
+
+        if include_date:
+            if release_date:
+                header += f"\n\n*Released: {release_date}*"
+            else:
+                date_format = self.config.get('output', 'header_date_format', default='%Y-%m-%d')
+                today = datetime.now().strftime(date_format)
+                header += f"\n\n*Released: {today}*"
 
         return header
 
     def _format_category_section(self, category: str,
                                   changes: List[Dict[str, Any]]) -> str:
         """Format a single category section."""
-        config = self.CATEGORY_CONFIG.get(category, {
-            'heading': category.title(),
-            'emoji': '',
-            'order': 99
-        })
+        cat_config = self._get_category_config(category)
 
         lines = []
 
         # Section heading
-        heading = config['heading']
-        if config['emoji']:
-            heading = f"{config['emoji']} {heading}"
+        heading = cat_config.get('heading', category.title())
         lines.append(f"## {heading}")
         lines.append('')
 
+        # Apply max per category limit if configured
+        max_items = self.config.get('consolidation', 'max_per_category', default=0)
+        display_changes = changes if max_items == 0 else changes[:max_items]
+
         # Bullet points
-        for change in changes:
+        for change in display_changes:
             bullet = self._format_bullet_point(change)
             if bullet:
                 lines.append(bullet)
+
+        # Show overflow count if limited
+        if max_items > 0 and len(changes) > max_items:
+            lines.append(f"- _...and {len(changes) - max_items} more_")
 
         return '\n'.join(lines)
 
@@ -247,6 +252,10 @@ class ChangelogFormatter:
         """
         lines = []
 
+        # Get Slack config
+        max_items = self.config.get('slack', 'max_items_per_category', default=5)
+        show_overflow = self.config.get('slack', 'show_overflow_count', default=True)
+
         # Header for Slack
         if version:
             lines.append(f"*Release {version} is now available!*")
@@ -259,10 +268,7 @@ class ChangelogFormatter:
         lines.append('')
 
         # Sort and format categories
-        sorted_categories = sorted(
-            grouped_changes.keys(),
-            key=lambda c: self.CATEGORY_CONFIG.get(c, {}).get('order', 99)
-        )
+        sorted_categories = self._get_sorted_categories(list(grouped_changes.keys()))
 
         for category in sorted_categories:
             changes = grouped_changes.get(category, [])
@@ -270,17 +276,17 @@ class ChangelogFormatter:
                 continue
 
             # Category header (bold for Slack)
-            config = self.CATEGORY_CONFIG.get(category, {'heading': category.title()})
-            lines.append(f"*{config['heading']}*")
+            cat_config = self._get_category_config(category)
+            lines.append(f"*{cat_config.get('heading', category.title())}*")
 
-            # Limit to top 5 changes per category for Slack
-            for change in changes[:5]:
+            # Limit items for Slack
+            for change in changes[:max_items]:
                 description = self._clean_description(change.get('description', ''))
                 if description:
                     lines.append(f"• {description}")
 
-            if len(changes) > 5:
-                lines.append(f"  _...and {len(changes) - 5} more_")
+            if show_overflow and len(changes) > max_items:
+                lines.append(f"  _...and {len(changes) - max_items} more_")
 
             lines.append('')
 
@@ -301,10 +307,7 @@ class ChangelogFormatter:
 
         # Flatten all changes in order
         all_changes = []
-        sorted_categories = sorted(
-            grouped_changes.keys(),
-            key=lambda c: self.CATEGORY_CONFIG.get(c, {}).get('order', 99)
-        )
+        sorted_categories = self._get_sorted_categories(list(grouped_changes.keys()))
 
         for category in sorted_categories:
             all_changes.extend(grouped_changes.get(category, []))
@@ -316,41 +319,193 @@ class ChangelogFormatter:
 
         return '\n'.join(lines)
 
-    def save_to_file(self, content: str, file_path: str) -> bool:
+    def ensure_output_directory(self, base_path: Optional[str] = None) -> Path:
+        """
+        Ensure the output directory exists.
+
+        Args:
+            base_path: Base path for output (default: current directory)
+
+        Returns:
+            Path to output directory
+        """
+        output_dir = self.config.get('output', 'directory', default='RELEASE_NOTES')
+
+        if base_path:
+            full_path = Path(base_path) / output_dir
+        else:
+            full_path = Path.cwd() / output_dir
+
+        # Create directory if it doesn't exist
+        full_path.mkdir(parents=True, exist_ok=True)
+
+        return full_path
+
+    def generate_filename(self, version: Optional[str] = None,
+                          base_path: Optional[str] = None) -> str:
+        """
+        Generate a full file path for the changelog with timestamp.
+
+        Args:
+            version: Optional version string
+            base_path: Base path for output (default: current directory)
+
+        Returns:
+            Full path to output file
+        """
+        # Ensure output directory exists
+        output_dir = self.ensure_output_directory(base_path)
+
+        # Get datetime format from config
+        dt_format = self.config.get('output', 'datetime_format', default='%Y%m%d_%H%M%S')
+        timestamp = datetime.now().strftime(dt_format)
+
+        if version:
+            # Clean version string for filename
+            clean_version = re.sub(r'[^\w.-]', '', version)
+            filename_template = self.config.get(
+                'output', 'filename_format',
+                default='RELEASE_NOTES_{version}_{datetime}.md'
+            )
+            filename = filename_template.format(
+                version=clean_version,
+                datetime=timestamp,
+                date=datetime.now().strftime('%Y%m%d')
+            )
+        else:
+            filename_template = self.config.get(
+                'output', 'filename_format_no_version',
+                default='RELEASE_NOTES_{datetime}.md'
+            )
+            filename = filename_template.format(
+                datetime=timestamp,
+                date=datetime.now().strftime('%Y%m%d')
+            )
+
+        return str(output_dir / filename)
+
+    def save_to_file(self, content: str, file_path: Optional[str] = None,
+                     version: Optional[str] = None,
+                     base_path: Optional[str] = None) -> str:
         """
         Save formatted content to a markdown file.
 
         Args:
             content: Formatted markdown content
-            file_path: Path to save the file
+            file_path: Explicit file path (overrides auto-generation)
+            version: Version for auto-generated filename
+            base_path: Base path for output directory
 
         Returns:
-            True if successful, False otherwise
-        """
-        try:
-            with open(file_path, 'w', encoding='utf-8') as f:
-                f.write(content)
-            return True
-        except Exception:
-            return False
+            Path to saved file
 
-    def generate_filename(self, version: Optional[str] = None,
-                          prefix: str = "RELEASE_NOTES") -> str:
+        Raises:
+            IOError: If file cannot be written
         """
-        Generate a filename for the changelog.
+        # Use provided path or generate one
+        if file_path:
+            output_path = Path(file_path)
+            # Ensure parent directory exists
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+        else:
+            output_path = Path(self.generate_filename(version, base_path))
+
+        try:
+            with open(output_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+            return str(output_path)
+        except Exception as e:
+            raise IOError(f"Failed to write file {output_path}: {e}")
+
+    def append_to_changelog(self, new_content: str,
+                            changelog_path: Optional[str] = None,
+                            create_backup: bool = True) -> str:
+        """
+        Prepend new release notes to existing CHANGELOG.md.
 
         Args:
-            version: Optional version string
-            prefix: Filename prefix
+            new_content: New release notes content
+            changelog_path: Path to CHANGELOG.md (default from config)
+            create_backup: Create backup before modifying
 
         Returns:
-            Generated filename
-        """
-        date_str = datetime.now().strftime("%Y%m%d")
+            Path to modified changelog
 
-        if version:
-            # Clean version string for filename
-            clean_version = re.sub(r'[^\w.-]', '', version)
-            return f"{prefix}_{clean_version}.md"
+        Raises:
+            FileNotFoundError: If changelog doesn't exist
+            IOError: If file cannot be modified
+        """
+        # Get default changelog path from config
+        if not changelog_path:
+            changelog_path = self.config.get(
+                'changelog_append', 'default_file',
+                default='CHANGELOG.md'
+            )
+
+        changelog = Path(changelog_path)
+
+        if not changelog.exists():
+            raise FileNotFoundError(f"Changelog not found: {changelog_path}")
+
+        # Create backup if requested
+        if create_backup:
+            backup_suffix = self.config.get(
+                'changelog_append', 'backup_suffix',
+                default='.bak'
+            )
+            backup_path = changelog.with_suffix(changelog.suffix + backup_suffix)
+            with open(changelog, 'r', encoding='utf-8') as f:
+                backup_content = f.read()
+            with open(backup_path, 'w', encoding='utf-8') as f:
+                f.write(backup_content)
+
+        # Read existing content
+        with open(changelog, 'r', encoding='utf-8') as f:
+            existing_content = f.read()
+
+        # Find insertion point (after header, before first version)
+        insert_pattern = self.config.get(
+            'changelog_append', 'insert_after_pattern',
+            default=r'^## \['
+        )
+
+        match = re.search(insert_pattern, existing_content, re.MULTILINE)
+
+        if match:
+            # Insert before the first version section
+            insert_pos = match.start()
+            new_full_content = (
+                existing_content[:insert_pos] +
+                new_content + '\n\n' +
+                existing_content[insert_pos:]
+            )
         else:
-            return f"{prefix}_{date_str}.md"
+            # No existing versions found, append after header
+            header_pattern = self.config.get(
+                'changelog_append', 'header_pattern',
+                default=r'^# Changelog'
+            )
+            header_match = re.search(header_pattern, existing_content, re.MULTILINE)
+
+            if header_match:
+                # Find end of header section (next blank line)
+                header_end = existing_content.find('\n\n', header_match.end())
+                if header_end == -1:
+                    header_end = len(existing_content)
+                else:
+                    header_end += 2  # Include the blank line
+
+                new_full_content = (
+                    existing_content[:header_end] +
+                    '\n' + new_content + '\n' +
+                    existing_content[header_end:]
+                )
+            else:
+                # No header found, prepend everything
+                new_full_content = new_content + '\n\n' + existing_content
+
+        # Write updated content
+        with open(changelog, 'w', encoding='utf-8') as f:
+            f.write(new_full_content)
+
+        return str(changelog)

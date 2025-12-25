@@ -1,10 +1,18 @@
 """
 Breaking change detector module.
 Identifies breaking changes from commit messages and code diffs.
+
+Now uses config.yaml for customizable patterns and keywords.
 """
 
 import re
 from typing import Dict, List, Any, Optional
+
+# Import config loader
+try:
+    from .config_loader import get_config
+except ImportError:
+    from config_loader import get_config
 
 
 class BreakingChangeDetector:
@@ -14,10 +22,12 @@ class BreakingChangeDetector:
     - Conventional commit syntax
     - Removed features in diffs
     - Configuration changes that require action
+
+    All settings configurable via config.yaml.
     """
 
-    # Commit message patterns indicating breaking changes
-    BREAKING_COMMIT_PATTERNS = [
+    # Default commit message patterns indicating breaking changes
+    DEFAULT_COMMIT_PATTERNS = [
         r'BREAKING\s*CHANGE',
         r'BREAKING:',
         r'BREAKING\s*-',
@@ -26,8 +36,8 @@ class BreakingChangeDetector:
         r'⚠️\s*BREAKING',
     ]
 
-    # Keywords that often indicate breaking changes
-    BREAKING_KEYWORDS = [
+    # Default keywords that often indicate breaking changes
+    DEFAULT_KEYWORDS = [
         'breaking',
         'migrate',
         'migration required',
@@ -44,8 +54,8 @@ class BreakingChangeDetector:
         'schema change',
     ]
 
-    # Patterns in diffs that may indicate breaking changes
-    BREAKING_DIFF_PATTERNS = [
+    # Default patterns in diffs that may indicate breaking changes
+    DEFAULT_DIFF_PATTERNS = [
         # Removed exports/public APIs
         (r'^-\s*export\s+(function|class|const)\s+\w+', 'Removed exported functionality'),
         (r'^-\s*public\s+(function|void|int|string)', 'Removed public method'),
@@ -65,14 +75,89 @@ class BreakingChangeDetector:
         (r'^-\s*(feature|flag).*enabled', 'Feature flag removed'),
     ]
 
-    def __init__(self):
-        """Initialize the detector."""
+    def __init__(self, config_path: Optional[str] = None):
+        """
+        Initialize the detector.
+
+        Args:
+            config_path: Optional path to custom config file
+        """
+        self.config = get_config(config_path)
         self.breaking_changes: List[Dict[str, Any]] = []
 
-    def detect(self, commits: List[Dict[str, Any]],
-               diffs: Optional[Dict[str, str]] = None) -> List[Dict[str, Any]]:
+        # Load settings from config
+        self.detect_from_diff = self.config.get(
+            'breaking_changes', 'detect_from_diff', default=True
+        )
+        self.breaking_indicator = self.config.get(
+            'breaking_changes', 'conventional_breaking_indicator', default='!'
+        )
+
+        # Load keywords from config, falling back to defaults
+        self.commit_keywords = self.config.get(
+            'breaking_changes', 'commit_keywords', default=self.DEFAULT_KEYWORDS
+        )
+
+        # Load diff patterns from config if available
+        diff_patterns_config = self.config.get(
+            'breaking_changes', 'diff_patterns', default=None
+        )
+        if diff_patterns_config:
+            # Convert config list to tuple format
+            self.diff_patterns = [
+                (p, 'Breaking change detected') for p in diff_patterns_config
+            ]
+        else:
+            self.diff_patterns = self.DEFAULT_DIFF_PATTERNS
+
+    def detect(self, subject: str, body: str = '', diff: str = '') -> List[Dict[str, Any]]:
         """
-        Detect breaking changes from commits and diffs.
+        Detect breaking changes from a single commit.
+
+        This is a convenience method for single-commit analysis.
+
+        Args:
+            subject: Commit subject line
+            body: Commit body (optional)
+            diff: Diff content (optional)
+
+        Returns:
+            List of breaking change dictionaries
+        """
+        # Create a pseudo-commit dict for internal methods
+        commit = {
+            'subject': subject,
+            'body': body,
+            'short_hash': '',
+            'hash': 'single'
+        }
+
+        breaking = []
+
+        # Check commit message
+        message_breaks = self._check_commit_message(commit)
+        breaking.extend(message_breaks)
+
+        # Check commit body for BREAKING CHANGE footer
+        if body:
+            body_breaks = self._check_commit_body(commit)
+            breaking.extend(body_breaks)
+
+        # Check diff if provided and enabled in config
+        if diff and self.detect_from_diff:
+            diff_breaks = self._check_diff(diff, commit)
+            breaking.extend(diff_breaks)
+
+        # Add category for consolidation
+        for change in breaking:
+            change['category'] = 'breaking'
+
+        return self._deduplicate(breaking)
+
+    def detect_from_commits(self, commits: List[Dict[str, Any]],
+                            diffs: Optional[Dict[str, str]] = None) -> List[Dict[str, Any]]:
+        """
+        Detect breaking changes from multiple commits.
 
         Args:
             commits: List of commit dictionaries
@@ -92,10 +177,14 @@ class BreakingChangeDetector:
             body_breaks = self._check_commit_body(commit)
             self.breaking_changes.extend(body_breaks)
 
-            # Check diff if provided
-            if diffs and commit.get('hash') in diffs:
+            # Check diff if provided and enabled
+            if self.detect_from_diff and diffs and commit.get('hash') in diffs:
                 diff_breaks = self._check_diff(diffs[commit['hash']], commit)
                 self.breaking_changes.extend(diff_breaks)
+
+        # Add category for consolidation
+        for change in self.breaking_changes:
+            change['category'] = 'breaking'
 
         # Deduplicate
         return self._deduplicate(self.breaking_changes)
@@ -109,7 +198,7 @@ class BreakingChangeDetector:
         breaking = []
 
         # Check for explicit breaking patterns
-        for pattern in self.BREAKING_COMMIT_PATTERNS:
+        for pattern in self.DEFAULT_COMMIT_PATTERNS:
             if re.search(pattern, subject, re.IGNORECASE):
                 description = self._extract_breaking_description(subject)
                 breaking.append({
@@ -123,7 +212,7 @@ class BreakingChangeDetector:
         # Check for keywords if not already found
         if not breaking:
             subject_lower = subject.lower()
-            for keyword in self.BREAKING_KEYWORDS:
+            for keyword in self.commit_keywords:
                 if keyword in subject_lower:
                     description = self._extract_breaking_description(subject)
                     breaking.append({
@@ -172,7 +261,7 @@ class BreakingChangeDetector:
         breaking = []
 
         for line in diff_content.split('\n'):
-            for pattern, description_template in self.BREAKING_DIFF_PATTERNS:
+            for pattern, description_template in self.diff_patterns:
                 if re.search(pattern, line, re.IGNORECASE):
                     breaking.append({
                         'description': description_template,

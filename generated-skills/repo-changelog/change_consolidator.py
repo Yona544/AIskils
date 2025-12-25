@@ -2,12 +2,20 @@
 Change consolidator module.
 Merges related changes, eliminates flip-flop changes (net-zero),
 and produces a clean list of actual changes for the changelog.
+
+Now uses config.yaml for customizable thresholds and settings.
 """
 
 import re
 from typing import Dict, List, Any, Optional, Set, Tuple
 from collections import defaultdict
 from difflib import SequenceMatcher
+
+# Import config loader
+try:
+    from .config_loader import get_config
+except ImportError:
+    from config_loader import get_config
 
 
 class ChangeConsolidator:
@@ -19,14 +27,33 @@ class ChangeConsolidator:
     - Merge related changes into single descriptions
     - Deduplicate similar changes
     - Focus on end result, not intermediate steps
+
+    All settings configurable via config.yaml.
     """
 
-    # Similarity threshold for merging changes (0-1)
-    SIMILARITY_THRESHOLD = 0.7
+    def __init__(self, config_path: Optional[str] = None):
+        """
+        Initialize the consolidator.
 
-    def __init__(self):
-        """Initialize the consolidator."""
+        Args:
+            config_path: Optional path to custom config file
+        """
+        self.config = get_config(config_path)
         self.tracked_items: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+
+        # Load settings from config
+        self.similarity_threshold = self.config.get(
+            'consolidation', 'similarity_threshold', default=0.7
+        )
+        self.remove_flipflops = self.config.get(
+            'consolidation', 'remove_flipflops', default=True
+        )
+        self.merge_similar = self.config.get(
+            'consolidation', 'merge_similar', default=True
+        )
+        self.min_confidence = self.config.get(
+            'consolidation', 'min_confidence', default='low'
+        )
 
     def consolidate(self, all_changes: List[Dict[str, Any]],
                     initial_state: Optional[Dict[str, Any]] = None,
@@ -48,11 +75,17 @@ class ChangeConsolidator:
         # Step 1: Remove exact duplicates
         unique_changes = self._remove_duplicates(all_changes)
 
-        # Step 2: Merge similar changes
-        merged_changes = self._merge_similar(unique_changes)
+        # Step 2: Merge similar changes (if enabled in config)
+        if self.merge_similar:
+            merged_changes = self._merge_similar(unique_changes)
+        else:
+            merged_changes = unique_changes
 
-        # Step 3: Detect and remove flip-flop changes
-        net_changes = self._remove_flipflops(merged_changes, initial_state, final_state)
+        # Step 3: Detect and remove flip-flop changes (if enabled in config)
+        if self.remove_flipflops:
+            net_changes = self._remove_flipflops_logic(merged_changes, initial_state, final_state)
+        else:
+            net_changes = merged_changes
 
         # Step 4: Filter out low-confidence or irrelevant changes
         filtered_changes = self._filter_changes(net_changes)
@@ -135,7 +168,7 @@ class ChangeConsolidator:
                         change2.get('description', '')
                     )
 
-                    if similarity >= self.SIMILARITY_THRESHOLD:
+                    if similarity >= self.similarity_threshold:
                         similar_group.append(change2)
                         used_indices.add(j)
 
@@ -182,7 +215,7 @@ class ChangeConsolidator:
         scores = {'high': 3, 'medium': 2, 'low': 1}
         return scores.get(confidence, 0)
 
-    def _remove_flipflops(self, changes: List[Dict[str, Any]],
+    def _remove_flipflops_logic(self, changes: List[Dict[str, Any]],
                           initial_state: Optional[Dict[str, Any]],
                           final_state: Optional[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """

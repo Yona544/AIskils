@@ -2,6 +2,8 @@
 Cross-platform Git repository analyzer.
 Handles git operations for Windows, macOS, and Linux.
 Supports GitHub, Bitbucket, and local repositories.
+
+Now uses config.yaml for customizable settings.
 """
 
 import subprocess
@@ -10,6 +12,12 @@ import re
 from typing import Dict, List, Any, Optional, Tuple
 from pathlib import Path
 
+# Import config loader
+try:
+    from .config_loader import get_config
+except ImportError:
+    from config_loader import get_config
+
 
 class GitAnalyzer:
     """
@@ -17,16 +25,23 @@ class GitAnalyzer:
     Extracts commits, diffs, and metadata from git repositories.
     """
 
-    def __init__(self, repo_path: Optional[str] = None):
+    def __init__(self, repo_path: Optional[str] = None, config_path: Optional[str] = None):
         """
         Initialize analyzer with repository path.
 
         Args:
             repo_path: Path to git repository (defaults to current directory)
+            config_path: Optional path to custom config file
         """
+        self.config = get_config(config_path)
         self.repo_path = Path(repo_path) if repo_path else Path.cwd()
         self.remote_url: Optional[str] = None
         self.remote_type: Optional[str] = None  # 'github', 'bitbucket', or 'local'
+
+        # Load settings from config
+        self.command_timeout = self.config.get('git', 'command_timeout', default=60)
+        self.include_merge_commits = self.config.get('git', 'include_merge_commits', default=False)
+        self.max_commits = self.config.get('git', 'max_commits', default=500)
 
         if not self._is_git_repo():
             raise ValueError(f"Not a valid git repository: {self.repo_path}")
@@ -326,7 +341,7 @@ class GitAnalyzer:
         """
         success, output = self._run_git([
             'diff', '--name-status', from_ref, to_ref
-        ], timeout=60)
+        ], timeout=self.command_timeout)
 
         if not success:
             return []
@@ -344,3 +359,120 @@ class GitAnalyzer:
                 })
 
         return files
+
+    # =========================================================================
+    # Convenience methods for generate_changelog.py entry point
+    # =========================================================================
+
+    def get_last_commits(self, count: int, include_merge: bool = False) -> List[Dict[str, Any]]:
+        """
+        Get the last N commits with their diffs.
+
+        Args:
+            count: Number of commits to retrieve
+            include_merge: Whether to include merge commits
+
+        Returns:
+            List of commit dictionaries with diff data
+        """
+        # Respect config max
+        count = min(count, self.max_commits)
+        commits = self.get_recent_commits(count)
+
+        # Filter merge commits if needed
+        if not include_merge:
+            commits = self._filter_merge_commits(commits)
+
+        # Enrich with diff data
+        return self._enrich_commits_with_diffs(commits)
+
+    def get_commits_since(self, ref: str, include_merge: bool = False) -> List[Dict[str, Any]]:
+        """
+        Get commits since a reference (tag, branch, commit) to HEAD.
+
+        Args:
+            ref: Starting reference (exclusive)
+            include_merge: Whether to include merge commits
+
+        Returns:
+            List of commit dictionaries with diff data
+        """
+        commits = self.get_commits_since_tag(ref)
+
+        # Filter merge commits if needed
+        if not include_merge:
+            commits = self._filter_merge_commits(commits)
+
+        # Respect max commits
+        commits = commits[:self.max_commits]
+
+        # Enrich with diff data
+        return self._enrich_commits_with_diffs(commits)
+
+    def get_commits_between(self, from_ref: str, to_ref: str,
+                            include_merge: bool = False) -> List[Dict[str, Any]]:
+        """
+        Get commits between two references.
+
+        Args:
+            from_ref: Starting reference (exclusive)
+            to_ref: Ending reference (inclusive)
+            include_merge: Whether to include merge commits
+
+        Returns:
+            List of commit dictionaries with diff data
+        """
+        commits = self.get_commits_between_tags(from_ref, to_ref)
+
+        # Filter merge commits if needed
+        if not include_merge:
+            commits = self._filter_merge_commits(commits)
+
+        # Respect max commits
+        commits = commits[:self.max_commits]
+
+        # Enrich with diff data
+        return self._enrich_commits_with_diffs(commits)
+
+    def _filter_merge_commits(self, commits: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Filter out merge commits based on subject line."""
+        patterns = self.config.get('filters', 'ignore_commit_patterns', default=[])
+        filtered = []
+
+        for commit in commits:
+            subject = commit.get('subject', '')
+            should_ignore = False
+
+            for pattern in patterns:
+                if re.search(pattern, subject, re.IGNORECASE):
+                    should_ignore = True
+                    break
+
+            if not should_ignore:
+                filtered.append(commit)
+
+        return filtered
+
+    def _enrich_commits_with_diffs(self, commits: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Add diff data to each commit."""
+        enriched = []
+
+        for commit in commits:
+            # Get diff data
+            diff_data = self.get_commit_diff(commit['hash'])
+
+            # Get commit body
+            body = self.get_commit_body(commit['hash'])
+
+            # Merge into commit
+            enriched_commit = {
+                **commit,
+                'diff': diff_data.get('diff_content', ''),
+                'files_changed': diff_data.get('files_changed', []),
+                'additions': diff_data.get('additions', 0),
+                'deletions': diff_data.get('deletions', 0),
+                'body': body
+            }
+            enriched.append(enriched_commit)
+
+        return enriched

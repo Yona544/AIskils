@@ -2,11 +2,19 @@
 Diff parser and interpreter.
 Reads actual code diffs and translates them into plain English descriptions
 that end-users can understand. No technical jargon, functions, or variables.
+
+Now uses config.yaml for customizable patterns and keywords.
 """
 
 import re
 from typing import Dict, List, Any, Optional, Tuple
 from pathlib import Path
+
+# Import config loader
+try:
+    from .config_loader import get_config
+except ImportError:
+    from config_loader import get_config
 
 
 class DiffParser:
@@ -51,9 +59,16 @@ class DiffParser:
         (r'endpoint\s*[:=]\s*["\'](.+?)["\']', 'endpoint_change'),
     ]
 
-    def __init__(self):
-        """Initialize the diff parser."""
+    def __init__(self, config_path: Optional[str] = None):
+        """
+        Initialize the diff parser.
+
+        Args:
+            config_path: Optional path to custom config file
+        """
+        self.config = get_config(config_path)
         self.changes: List[Dict[str, Any]] = []
+        self._keyword_map = self.config.get_all_keywords()
 
     def parse_diff(self, diff_content: str, files_changed: List[Dict[str, str]],
                    commit_subject: str) -> List[Dict[str, Any]]:
