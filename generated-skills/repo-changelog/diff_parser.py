@@ -60,6 +60,22 @@ class DiffParser:
         '**/vendor/**',
         '**/dist/**',
         '**/build/**',
+        # Delphi project files (XML - very noisy)
+        '*.dproj',
+        '*.groupproj',
+        '*.dof',
+        '*.cfg',
+        '*.deployproj',
+        # Delphi build artifacts
+        '*.dcu',
+        '*.res',
+        '*.identcache',
+        '*.local',
+        '*.~*',
+        # Delphi help files
+        '*.hhc',
+        '*.hhk',
+        '*.hhp',
     ]
 
     # Patterns to skip in diff content (hashes, checksums, CI/CD, tests, etc.)
@@ -95,17 +111,64 @@ class DiffParser:
         # URL-like test data
         r'http:/\w+',  # Malformed URLs (missing slash)
         r'https:/\w+',  # Malformed URLs (missing slash)
+        # Delphi build variables (from .dproj XML files)
+        r'\$\(Platform\)',
+        r'\$\(BDS\w*\)',
+        r'\$\(Base_\w+\)',
+        r'\$\(ProjectName\)',
+        r'\$\(MSBuild\w+\)',
+        r'\$\(APPDATA\)\\\\Embarcadero',
+        r'\$\(BDSBIN\)',
+        # Delphi Android/iOS resource identifiers
+        r'Android(Lib|File|Service|_)\w+',
+        r'iOS_\w+\d+',
+        r'iPad_\w+\d*',
+        r'iPhone_\w+\d*',
+        r'UWP_\w+\d*',
+        r'iOSSimARM64',
+        r'armeabi-v7a',
+        r'arm64-v8a',
+        # Delphi XML project patterns
+        r'<PropertyGroup\s',
+        r'<ItemGroup\s',
+        r'DependencyFramework',
+        r'AdditionalDebugSymbols',
+        # Delphi help file patterns
+        r'collapsibleArea\w*',
+        r'contentEditableControl',
+        r'hiddenScrollOffset',
+        r'inheritanceHierarchyContent',
+        r'group-\w+Section',
+        r'group-\w+Header',
+        r'group-\w+Content',
+        r'group-\w+',  # Catch remaining group-* patterns
+        r'text/sitemap',
+        r'tableSection',
+        r'summaryHeader',
+        r'userDataCache',
+        r'contentEditable',
+        r'mk:@MSITStore',
+        r'ms-help:',
+        r'index\.html\?',
+        # Delphi package/binary paths
+        r'\.bpl\b',
+        r'\.dcp\b',
+        r'\\Binary\\',
+        # SVG path data (very noisy)
+        r'^M\d+[,\s]\d+\s*[LCZHVlchvz]',  # M100,80 C250...
+        r'^M\d+\s+\d+h\d+v\d+H\d+z',  # M0 0h108v108H0z
     ]
 
     # File type categories for context
     FILE_CATEGORIES = {
-        'ui': ['.html', '.css', '.scss', '.less', '.jsx', '.tsx', '.vue', '.svelte'],
+        'ui': ['.html', '.css', '.scss', '.less', '.jsx', '.tsx', '.vue', '.svelte', '.dfm', '.fmx'],
         'config': ['.json', '.yaml', '.yml', '.toml', '.ini', '.env', '.config'],
         'docs': ['.md', '.txt', '.rst', '.doc', '.docx', '.pdf'],
-        'code': ['.py', '.js', '.ts', '.go', '.java', '.cs', '.rb', '.php', '.swift', '.kt'],
+        'code': ['.py', '.js', '.ts', '.go', '.java', '.cs', '.rb', '.php', '.swift', '.kt', '.pas', '.dpr', '.dpk'],
         'data': ['.sql', '.csv', '.xml'],
         'build': ['Makefile', 'Dockerfile', '.sh', '.bat', '.ps1', 'package.json', 'requirements.txt'],
-        'test': ['test_', '_test.', '.test.', 'spec.']
+        'test': ['test_', '_test.', '.test.', 'spec.'],
+        'delphi': ['.pas', '.dpr', '.dpk', '.dfm', '.fmx', '.inc']
     }
 
     # Patterns that indicate user-facing changes
@@ -250,6 +313,9 @@ class DiffParser:
         # Remove conventional commit prefixes
         clean_subject = re.sub(r'^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\(.+?\))?!?:\s*', '', clean_subject, flags=re.IGNORECASE)
 
+        # Remove Delphi-style prefixes like [Library], [Tests], [API], [FMX Render], etc.
+        clean_subject = re.sub(r'^\[[\w\s]+\]\s*', '', clean_subject)
+
         # Remove ticket references
         clean_subject = re.sub(r'\[?[A-Z]+-\d+\]?\s*', '', clean_subject)
         clean_subject = re.sub(r'#\d+\s*', '', clean_subject)
@@ -276,6 +342,27 @@ class DiffParser:
     def _categorize_from_message(self, message: str) -> str:
         """Determine category from commit message."""
         message_lower = message.lower()
+
+        # Check for Delphi-style prefixes like [Library], [Tests], [API]
+        delphi_prefix_match = re.match(r'^\[([\w\s]+)\]', message)
+        if delphi_prefix_match:
+            prefix = delphi_prefix_match.group(1).lower()
+            delphi_categories = {
+                'library': 'change',
+                'api': 'change',
+                'tests': 'other',
+                'test': 'other',
+                'fmx render': 'enhancement',
+                'vcl render': 'enhancement',
+                'controls': 'enhancement',
+                'setup': 'other',
+                'documentation': 'other',
+                'docs': 'other',
+                'samples': 'other',
+                'sample': 'other',
+            }
+            if prefix in delphi_categories:
+                return delphi_categories[prefix]
 
         # Check for conventional commit prefixes
         if re.match(r'^feat(\(.+?\))?!?:', message_lower):
