@@ -43,6 +43,22 @@ categories:
       - "deprecated and removed"
     order: 0  # Shown first
 
+  security:
+    heading: "Security Updates"
+    description: "Security patches and vulnerability fixes"
+    keywords:
+      - "security"
+      - "sec:"
+      - "CVE-"
+      - "vulnerability"
+      - "exploit"
+      - "XSS"
+      - "injection"
+      - "authentication bypass"
+      - "authorization"
+      - "CSRF"
+    order: 1  # High priority, shown after breaking
+
   feature:
     heading: "New Features"
     description: "Brand new functionality"
@@ -55,7 +71,7 @@ categories:
       - "create"
       - "implement"
       - "introduce"
-    order: 1
+    order: 2
 
   enhancement:
     heading: "Enhancements"
@@ -70,7 +86,7 @@ categories:
       - "better"
       - "perf"
       - "performance"
-    order: 2
+    order: 3
 
   bugfix:
     heading: "Bug Fixes"
@@ -85,7 +101,7 @@ categories:
       - "patch"
       - "repair"
       - "correct"
-    order: 3
+    order: 4
 
   change:
     heading: "Changes"
@@ -98,13 +114,25 @@ categories:
       - "refactor"
       - "restructure"
       - "reorganize"
-    order: 4
+    order: 5
+
+  dependency:
+    heading: "Dependency Updates"
+    description: "Third-party library and package updates"
+    keywords:
+      - "deps"
+      - "dependency"
+      - "dependencies"
+      - "bump"
+      - "upgrade"
+      - "package"
+    order: 6
 
   other:
     heading: "Other Updates"
     description: "Miscellaneous updates"
     keywords: []  # Catch-all for unmatched
-    order: 5
+    order: 7
 
 # =============================================================================
 # FILTERING SETTINGS

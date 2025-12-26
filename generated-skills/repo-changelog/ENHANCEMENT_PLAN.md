@@ -903,9 +903,75 @@ Phase 4: Automation & Quality ✅ COMPLETE
 ├── Task 7: Git tag hook
 └── Task 8: Test suite
 
-Phase 5: AI Improvements 🔄 IN PROGRESS
+Phase 5: AI Improvements ✅ COMPLETE
 └── Task 9: Cross-Reference Detection
+
+Phase 6: Noise Reduction ✅ COMPLETE
+└── Task 10: Lock file filtering, hash exclusion, security/dependency categories
 ```
+
+---
+
+## Phase 6: Noise Reduction
+
+### Task 10: Lock File Filtering & Category Improvements
+
+**Status:** ✅ Complete
+
+### Problem Statement
+Testing on real-world repositories (Express.js, Flask) revealed critical noise issues:
+- Flask repo produced 1,271 changes from 38 commits (mostly SHA256 hashes from lock files)
+- Security commits (`sec:`) were not properly categorized
+- Dependency bumps (`build(deps):`) were not grouped
+
+### Solution Implemented
+
+#### 1. Lock File Ignore List (diff_parser.py)
+Added `IGNORE_FILES` constant to skip processing:
+- `package-lock.json`, `yarn.lock`, `pnpm-lock.yaml`
+- `Pipfile.lock`, `poetry.lock`, `Gemfile.lock`
+- `composer.lock`, `Cargo.lock`, `go.sum`
+- `requirements.txt`, `*.lock`
+
+#### 2. Noise Pattern Exclusion (diff_parser.py)
+Added `NOISE_PATTERNS` regex list to filter:
+- `sha256:[a-f0-9]{64}` SHA256 hashes
+- `sha512:[a-f0-9]{128}` SHA512 hashes
+- `sha1:[a-f0-9]{40}` SHA1 hashes
+- Bare 64-character hex strings
+- npm integrity and resolved URL patterns
+
+#### 3. Security Category (config.yaml, diff_parser.py)
+Added security category with:
+- Order: 1 (shown after Breaking Changes)
+- Prefix recognition: `sec:`, `security:`
+- Keywords: CVE, vulnerability, exploit, XSS, injection, CSRF
+- Heading: "Security Updates"
+
+#### 4. Dependency Category (config.yaml, diff_parser.py)
+Added dependency category with:
+- Order: 6 (shown before Other Updates)
+- Prefix recognition: `build(deps):`, `build(deps-dev):`
+- Keywords: deps, dependency, bump
+- Heading: "Dependency Updates"
+
+### Results
+| Repository | Before | After | Improvement |
+|------------|--------|-------|-------------|
+| Flask | 1,271 changes | 26 changes | 98% noise reduction |
+| Express.js | 11 changes | 11 changes | Security category now shows |
+
+### Files Modified
+- `diff_parser.py` - Added IGNORE_FILES, NOISE_PATTERNS, security/dependency categorization
+- `config.yaml` - Added security and dependency category definitions, reordered categories
+
+### Acceptance Criteria
+- [x] Lock files are ignored during diff analysis
+- [x] SHA256/512 hashes are filtered from output
+- [x] Security commits are categorized correctly
+- [x] Dependency bumps are grouped together
+- [x] All 42 tests pass
+- [x] Real-world repo testing shows improvement
 
 ---
 
@@ -921,10 +987,11 @@ Phase 5: AI Improvements 🔄 IN PROGRESS
 | Task 6: Preview mode | 1.5 hours | High | ✅ Complete |
 | Task 7: Git tag hook | 45 min | Medium | ✅ Complete |
 | Task 8: Test suite | 2 hours | High | ✅ Complete |
-| Task 9: Cross-Reference Detection | 2 hours | High | 🔄 In Progress |
-| **Total** | **~11 hours** | | |
+| Task 9: Cross-Reference Detection | 2 hours | High | ✅ Complete |
+| Task 10: Noise Reduction | 1 hour | Medium | ✅ Complete |
+| **Total** | **~12 hours** | | |
 
 ---
 
-*Document updated: 2024-12-25*
+*Document updated: 2024-12-26*
 *Document created for AIskils/repo-changelog skill enhancement*

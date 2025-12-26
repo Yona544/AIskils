@@ -23,6 +23,34 @@ class DiffParser:
     Focuses on the end result, not technical implementation details.
     """
 
+    # Files to ignore (lock files, generated files)
+    IGNORE_FILES = [
+        'package-lock.json',
+        'yarn.lock',
+        'pnpm-lock.yaml',
+        'Pipfile.lock',
+        'poetry.lock',
+        'Gemfile.lock',
+        'composer.lock',
+        'Cargo.lock',
+        'go.sum',
+        'requirements.txt',  # Often contains hashes
+        'requirements-*.txt',
+        '*.lock',
+        '.terraform.lock.hcl',
+    ]
+
+    # Patterns to skip in diff content (hashes, checksums, etc.)
+    NOISE_PATTERNS = [
+        r'sha256:[a-f0-9]{64}',  # SHA256 hashes
+        r'sha512:[a-f0-9]{128}',  # SHA512 hashes
+        r'sha1:[a-f0-9]{40}',  # SHA1 hashes
+        r'\b[a-f0-9]{64}\b',  # Bare 64-char hex (likely hash)
+        r'integrity\s*[:=]\s*["\']sha\d+-',  # npm integrity hashes
+        r'"resolved":\s*"https?://',  # npm resolved URLs
+        r'"version":\s*"\d+\.\d+',  # Version strings in lock files
+    ]
+
     # File type categories for context
     FILE_CATEGORIES = {
         'ui': ['.html', '.css', '.scss', '.less', '.jsx', '.tsx', '.vue', '.svelte'],
@@ -69,6 +97,8 @@ class DiffParser:
         self.config = get_config(config_path)
         self.changes: List[Dict[str, Any]] = []
         self._keyword_map = self.config.get_all_keywords()
+        # Compile noise patterns for efficiency
+        self._noise_regex = [re.compile(p, re.IGNORECASE) for p in self.NOISE_PATTERNS]
 
     def parse_diff(self, diff_content: str, files_changed: List[Dict[str, str]],
                    commit_subject: str) -> List[Dict[str, Any]]:
@@ -85,20 +115,46 @@ class DiffParser:
         """
         changes = []
 
+        # Filter out ignored files (lock files, generated files)
+        filtered_files = [f for f in files_changed if not self._should_ignore_file(f['path'])]
+
         # First, try to understand from the commit message
         message_interpretation = self._interpret_commit_message(commit_subject)
         if message_interpretation:
             changes.append(message_interpretation)
 
-        # Parse the actual diff for more details
-        diff_changes = self._parse_diff_content(diff_content, files_changed)
-        changes.extend(diff_changes)
+        # Parse the actual diff for more details (only if not all files are ignored)
+        if filtered_files:
+            diff_changes = self._parse_diff_content(diff_content, filtered_files)
+            changes.extend(diff_changes)
 
-        # Analyze file-level changes
-        file_changes = self._analyze_file_changes(files_changed)
+        # Analyze file-level changes (using filtered files)
+        file_changes = self._analyze_file_changes(filtered_files)
         changes.extend(file_changes)
 
         return changes
+
+    def _should_ignore_file(self, path: str) -> bool:
+        """Check if a file should be ignored (lock files, generated files)."""
+        from pathlib import Path
+        import fnmatch
+
+        filename = Path(path).name
+
+        for pattern in self.IGNORE_FILES:
+            if fnmatch.fnmatch(filename, pattern):
+                return True
+            if fnmatch.fnmatch(path, pattern):
+                return True
+
+        return False
+
+    def _is_noise_content(self, text: str) -> bool:
+        """Check if text matches noise patterns (hashes, checksums, etc.)."""
+        for regex in self._noise_regex:
+            if regex.search(text):
+                return True
+        return False
 
     def _interpret_commit_message(self, subject: str) -> Optional[Dict[str, Any]]:
         """
@@ -151,6 +207,8 @@ class DiffParser:
             return 'feature'
         if re.match(r'^fix(\(.+?\))?!?:', message_lower):
             return 'bugfix'
+        if re.match(r'^sec(urity)?(\(.+?\))?!?:', message_lower):
+            return 'security'
         if re.match(r'^(perf|enhance|improve)(\(.+?\))?:', message_lower):
             return 'enhancement'
         if re.match(r'^(docs|doc)(\(.+?\))?:', message_lower):
@@ -159,18 +217,25 @@ class DiffParser:
             return 'other'
         if re.match(r'^revert(\(.+?\))?:', message_lower):
             return 'change'
+        # Dependency bumps - group together
+        if re.match(r'^build\(deps(-dev)?\):', message_lower):
+            return 'dependency'
 
         # Check for keywords
         if any(word in message_lower for word in ['add', 'new', 'create', 'implement', 'introduce']):
             return 'feature'
         if any(word in message_lower for word in ['fix', 'bug', 'issue', 'error', 'crash', 'resolve']):
             return 'bugfix'
+        if any(word in message_lower for word in ['security', 'cve', 'vulnerability', 'exploit']):
+            return 'security'
         if any(word in message_lower for word in ['improve', 'enhance', 'update', 'upgrade', 'optimize', 'better']):
             return 'enhancement'
         if any(word in message_lower for word in ['remove', 'delete', 'deprecate']):
             return 'change'
         if any(word in message_lower for word in ['breaking', 'migrate', 'migration']):
             return 'breaking'
+        if any(word in message_lower for word in ['bump', 'deps', 'dependency']):
+            return 'dependency'
 
         return 'other'
 
@@ -232,6 +297,10 @@ class DiffParser:
         additions = self._extract_additions(diff_content)
 
         for line in additions:
+            # Skip lines that are noise (hashes, checksums, etc.)
+            if self._is_noise_content(line):
+                continue
+
             for pattern, change_type in self.USER_FACING_PATTERNS:
                 match = re.search(pattern, line, re.IGNORECASE)
                 if match:
@@ -240,6 +309,10 @@ class DiffParser:
 
                     # Skip if it looks like code (has function calls, brackets, etc.)
                     if self._looks_like_code(value):
+                        continue
+
+                    # Skip if the matched value is noise
+                    if self._is_noise_content(value):
                         continue
 
                     description = self._describe_pattern_change(change_type, value, line)
