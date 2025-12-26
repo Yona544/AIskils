@@ -23,8 +23,9 @@ class DiffParser:
     Focuses on the end result, not technical implementation details.
     """
 
-    # Files to ignore (lock files, generated files)
+    # Files to ignore (lock files, generated files, test files)
     IGNORE_FILES = [
+        # Lock files
         'package-lock.json',
         'yarn.lock',
         'pnpm-lock.yaml',
@@ -38,17 +39,62 @@ class DiffParser:
         'requirements-*.txt',
         '*.lock',
         '.terraform.lock.hcl',
+        # Test files (don't extract "should..." patterns from tests)
+        'test_*.py',
+        '*_test.py',
+        '*.test.js',
+        '*.test.ts',
+        '*.spec.js',
+        '*.spec.ts',
+        '**/test/**',
+        '**/tests/**',
+        '**/spec/**',
+        '**/__tests__/**',
+        # CI/CD files
+        '.github/workflows/*.yml',
+        '.github/workflows/*.yaml',
+        '.gitlab-ci.yml',
+        'Jenkinsfile',
+        # Generated/vendor files
+        '**/node_modules/**',
+        '**/vendor/**',
+        '**/dist/**',
+        '**/build/**',
     ]
 
-    # Patterns to skip in diff content (hashes, checksums, etc.)
+    # Patterns to skip in diff content (hashes, checksums, CI/CD, tests, etc.)
     NOISE_PATTERNS = [
+        # Hashes and checksums
         r'sha256:[a-f0-9]{64}',  # SHA256 hashes
         r'sha512:[a-f0-9]{128}',  # SHA512 hashes
+        r'sha512-[A-Za-z0-9+/=]{50,}',  # Base64 SHA512
         r'sha1:[a-f0-9]{40}',  # SHA1 hashes
         r'\b[a-f0-9]{64}\b',  # Bare 64-char hex (likely hash)
         r'integrity\s*[:=]\s*["\']sha\d+-',  # npm integrity hashes
         r'"resolved":\s*"https?://',  # npm resolved URLs
         r'"version":\s*"\d+\.\d+',  # Version strings in lock files
+        # GitHub Actions
+        r'actions/[\w-]+@v?\d+',  # actions/checkout@v4
+        r'actions/[\w-]+@[a-f0-9]{7,}',  # actions/checkout@abc1234
+        r'::set-output\s+name=',  # GitHub Actions commands
+        r'uses:\s+[\w-]+/[\w-]+@',  # uses: org/repo@ref
+        # CI/CD patterns
+        r'slsa-framework/',  # SLSA framework refs
+        r'pypa/gh-action-',  # PyPA GitHub actions
+        r'step-security/',  # Step security actions
+        # Test assertions (common patterns)
+        r'^should\s+\w+',  # "should convert...", "should throw..."
+        r'assert\w*\s*\(',  # assert(), assertEqual()
+        r'expect\s*\(',  # expect()
+        r'describe\s*\(',  # describe()
+        r'it\s*\([\'"]should',  # it('should...')
+        # node_modules paths
+        r'node_modules/',  # Any node_modules reference
+        # Error codes and internal identifiers
+        r'ERR_[A-Z_]+',  # Node.js error codes
+        # URL-like test data
+        r'http:/\w+',  # Malformed URLs (missing slash)
+        r'https:/\w+',  # Malformed URLs (missing slash)
     ]
 
     # File type categories for context
@@ -347,6 +393,17 @@ class DiffParser:
             r'^\d+$',  # Just numbers
             r'^[a-z_]+$',  # Just identifiers
             r'^\s*$',  # Empty/whitespace
+            r'^\.\.+$',  # Just dots
+            r'^\.\.$',  # ".."
+            r'^[A-Z_]{3,}$',  # ALL_CAPS constants
+            r'::\w+',  # Ruby/C++ scope resolution
+            r'@\w+/',  # npm scoped packages
+            r'^[\w-]+@[\d\.]+',  # package@version
+            r'BSD-\d+-Clause',  # License identifiers
+            r'^peerDependencies$',  # package.json fields
+            r'^node_modules',  # node_modules paths
+            r'^\d+\.\%$',  # Percentage like "33.%"
+            r'^\\n$',  # Escaped newlines
         ]
 
         for pattern in code_patterns:
@@ -355,6 +412,55 @@ class DiffParser:
 
         # Too short to be meaningful text
         if len(text) < 3:
+            return True
+
+        # Looks like a test assertion
+        if text.lower().startswith('should '):
+            return True
+
+        # Looks like a file path
+        if '/' in text and (text.count('/') > 2 or text.startswith('/')):
+            return True
+
+        # Looks like HTML entities
+        if '&#x' in text or '&amp;' in text:
+            return True
+
+        # Looks like spam/promotional (common patterns)
+        spam_keywords = ['buy instagram', 'ставки', 'betting', 'casino', 'followers',
+                        'best route planning', 'route optimization software']
+        if any(kw in text.lower() for kw in spam_keywords):
+            return True
+
+        # Looks like CI/CD step names
+        ci_step_patterns = [
+            r'^set up \w+',  # "Set up Python"
+            r'^checkout\s',  # "Checkout repository"
+            r'^install\s',  # "Install dependencies"
+            r'^build\s',  # "Build dists"
+            r'^generate\s',  # "Generate hashes"
+            r'^download\s',  # "Download artifact"
+            r'^upload\s',  # "Upload artifact"
+        ]
+        for pattern in ci_step_patterns:
+            if re.match(pattern, text.lower()):
+                return True
+
+        # Looks like test data (patterns with login/password/machine)
+        if any(kw in text.lower() for kw in ['login ', 'password ', 'machine ']):
+            if '\\n' in text or '\n' in text:
+                return True
+
+        # Looks like Python classifiers
+        if text.startswith('Programming Language'):
+            return True
+
+        # Looks like CSS classes
+        if re.match(r'^[a-z]+-[a-z]+-?[a-z]*$', text):  # btn-primary, fas-icon
+            return True
+
+        # Looks like error/debug code
+        if re.match(r'^(Invalid|Error|Unexpected|Could not|Unable to)\s', text):
             return True
 
         return False

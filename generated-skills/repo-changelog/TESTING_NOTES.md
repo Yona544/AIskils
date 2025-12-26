@@ -337,4 +337,100 @@ Added recognition for:
 
 ---
 
-*Document created during testing session, December 26, 2025*
+## Round 2: Additional Repository Testing
+
+### Repositories Tested
+
+| Repository | Language | Commit Style |
+|------------|----------|--------------|
+| axios | JavaScript/TypeScript | Conventional commits (feat:, fix:, chore:) |
+| requests | Python | Merge commits, less conventional |
+
+### Initial Results (After Phase 6)
+
+| Repository | Commits | Changes Found | Issues |
+|------------|---------|---------------|--------|
+| axios | 50 | 87 | SHA512 hashes, test assertions, sponsor spam |
+| requests | 37 | 37 | GitHub Actions refs, CI commands, test data |
+
+### After Phase 7 Improvements
+
+| Repository | Before | After | Improvement |
+|------------|--------|-------|-------------|
+| axios | 87 | 35 | **60% reduction** |
+| requests | 37 | 20 | **46% reduction** |
+
+### New Issues Discovered
+
+1. **Test file content leaking** - Test assertions like "should convert...", "Should have thrown..."
+2. **GitHub Actions references** - `actions/checkout@v4`, `uses: org/repo@ref`
+3. **CI/CD step names** - "Set up Python", "Install dependencies", "Build dists"
+4. **SHA512 hashes** - Base64 encoded hashes in package-lock.json
+5. **Sponsor/promotional content** - Marketing text in sponsor blocks
+6. **node_modules paths** - Internal dependency paths
+7. **Python classifiers** - "Programming Language :: Python :: 3.14"
+8. **Test data** - `machine example.com login aaaa password bbbb\n`
+9. **CSS classes** - "btn-primary", "fas-icon"
+10. **Internal error messages** - "Invalid file path", "Error while reading"
+
+### Fixes Applied (Phase 7)
+
+#### 1. Expanded IGNORE_FILES (diff_parser.py)
+
+Added test file patterns:
+- `test_*.py`, `*_test.py`, `*.test.js`, `*.spec.ts`
+- `**/test/**`, `**/tests/**`, `**/__tests__/**`
+
+Added CI/CD files:
+- `.github/workflows/*.yml`, `.gitlab-ci.yml`, `Jenkinsfile`
+
+Added generated directories:
+- `**/node_modules/**`, `**/vendor/**`, `**/dist/**`
+
+#### 2. Expanded NOISE_PATTERNS (diff_parser.py)
+
+GitHub Actions patterns:
+- `actions/[\w-]+@v?\d+` - version refs
+- `::set-output\s+name=` - workflow commands
+- `uses:\s+[\w-]+/[\w-]+@` - action references
+
+CI/CD framework patterns:
+- `slsa-framework/`, `pypa/gh-action-`, `step-security/`
+
+Test patterns:
+- `^should\s+\w+` - test assertions
+- `assert\w*\(`, `expect\(`, `describe\(` - test frameworks
+
+#### 3. Enhanced _looks_like_code() (diff_parser.py)
+
+Added detection for:
+- CSS class patterns (`btn-primary`)
+- CI step names (`set up`, `checkout`, `install`, `build`)
+- Test data patterns (login/password with newlines)
+- Python classifiers
+- Error message patterns
+- Spam/promotional keywords
+
+### Results Summary
+
+| Phase | Repository | Changes | Cumulative Reduction |
+|-------|------------|---------|---------------------|
+| Phase 6 | Flask | 1,271 → 26 | 98% |
+| Phase 6 | Express.js | 11 → 11 | Security category added |
+| Phase 7 | axios | 87 → 35 | 60% |
+| Phase 7 | requests | 37 → 20 | 46% |
+
+### Remaining Edge Cases
+
+Some content is genuinely ambiguous and hard to filter automatically:
+1. User-facing error messages (legitimate but look like internal errors)
+2. Sponsor block promotional content
+3. Package names in dependencies section
+4. CSS classes vs user-facing labels
+
+These would require AI interpretation or manual review to filter correctly.
+
+---
+
+*Document updated: December 26, 2025*
+*Testing rounds: 2 (Phase 6 + Phase 7)*

@@ -908,6 +908,9 @@ Phase 5: AI Improvements ✅ COMPLETE
 
 Phase 6: Noise Reduction ✅ COMPLETE
 └── Task 10: Lock file filtering, hash exclusion, security/dependency categories
+
+Phase 7: Advanced Noise Reduction ✅ COMPLETE
+└── Task 11: Test files, CI/CD, GitHub Actions, spam filtering
 ```
 
 ---
@@ -989,7 +992,55 @@ Added dependency category with:
 | Task 8: Test suite | 2 hours | High | ✅ Complete |
 | Task 9: Cross-Reference Detection | 2 hours | High | ✅ Complete |
 | Task 10: Noise Reduction | 1 hour | Medium | ✅ Complete |
-| **Total** | **~12 hours** | | |
+| Task 11: Advanced Noise Reduction | 1 hour | Medium | ✅ Complete |
+| **Total** | **~13 hours** | | |
+
+---
+
+## Phase 7: Advanced Noise Reduction
+
+### Task 11: Test Files, CI/CD, and Spam Filtering
+
+**Status:** ✅ Complete
+
+### Problem Statement
+Testing on axios and requests repositories revealed additional noise sources:
+- Test file content (assertions, test data)
+- GitHub Actions references and CI/CD commands
+- Sponsor block promotional content
+- Python classifiers and package metadata
+- CSS class names
+
+### Solution Implemented
+
+#### 1. Expanded IGNORE_FILES
+- Test files: `test_*.py`, `*_test.py`, `*.test.js`, `*.spec.ts`
+- Test directories: `**/test/**`, `**/tests/**`, `**/__tests__/**`
+- CI/CD files: `.github/workflows/*.yml`, `.gitlab-ci.yml`
+- Generated: `**/node_modules/**`, `**/vendor/**`, `**/dist/**`
+
+#### 2. Expanded NOISE_PATTERNS
+- GitHub Actions: `actions/[\w-]+@v?\d+`, `::set-output`, `uses:`
+- CI frameworks: `slsa-framework/`, `pypa/gh-action-`
+- Test assertions: `^should\s+\w+`, `assert\w*\(`, `expect\(`
+- node_modules references
+
+#### 3. Enhanced _looks_like_code()
+- CI step names: "set up", "checkout", "install", "build"
+- Test data patterns (login/password with newlines)
+- Python classifiers
+- CSS class patterns
+- Error message patterns
+- Spam/promotional keywords
+
+### Results
+| Repository | Before | After | Improvement |
+|------------|--------|-------|-------------|
+| axios | 87 | 35 | 60% reduction |
+| requests | 37 | 20 | 46% reduction |
+
+### Files Modified
+- `diff_parser.py` - Expanded IGNORE_FILES, NOISE_PATTERNS, _looks_like_code()
 
 ---
 
