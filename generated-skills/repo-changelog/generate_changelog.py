@@ -158,6 +158,11 @@ Examples:
     # AI interpretation options
     ai_group = parser.add_argument_group('AI Interpretation')
     ai_group.add_argument(
+        '--setup',
+        action='store_true',
+        help='Configure AI with your Anthropic MAX subscription (opens browser)'
+    )
+    ai_group.add_argument(
         '--no-ai',
         action='store_true',
         help='Disable AI interpretation (use pattern matching only)'
@@ -494,6 +499,7 @@ def _offer_ai_setup() -> None:
     """
     Offer to set up AI integration when no API key is available.
     Opens browser to Anthropic console if user agrees.
+    Prioritizes MAX subscription (included API access) over pay-per-use.
     """
     import webbrowser
 
@@ -502,37 +508,45 @@ def _offer_ai_setup() -> None:
     print("=" * 60)
     print("\nAI interpretation improves changelog quality by understanding")
     print("code changes in context. Without it, pattern matching is used.")
-    print("\nOptions to enable AI:")
-    print("  1. Set environment variable: export ANTHROPIC_API_KEY='sk-...'")
-    print("  2. Pass via CLI: --anthropic-key sk-...")
-    print("  3. Run setup now (opens browser to get API key)")
+    print("\n" + "-" * 60)
+    print("RECOMMENDED: Use your Anthropic MAX subscription (included!)")
+    print("-" * 60)
+    print("If you have Claude MAX, your API usage is included in your")
+    print("subscription - no extra cost per request.")
     print("\nTo skip this message, use --no-ai or --quiet")
     print()
 
     try:
-        response = input("Would you like to set up AI now? [y/N]: ").strip().lower()
-        if response in ('y', 'yes'):
-            print("\nOpening Anthropic Console to create an API key...")
+        response = input("Set up with MAX subscription? [Y/n]: ").strip().lower()
+        if response not in ('n', 'no'):
+            print("\nOpening Anthropic Console...")
+            print("1. Log in with your MAX account")
+            print("2. Go to API Keys section")
+            print("3. Create a new key (it uses your MAX quota)")
+            print()
             print("URL: https://console.anthropic.com/settings/keys")
             webbrowser.open('https://console.anthropic.com/settings/keys')
 
-            print("\nAfter creating your API key, paste it here.")
+            print("\nPaste your API key below.")
             print("(It will be saved to ~/.config/repo-changelog/api_keys.json)")
             print()
 
-            api_key = input("Paste your Anthropic API key (or press Enter to skip): ").strip()
+            api_key = input("API key (or Enter to skip): ").strip()
             if api_key:
                 if api_key.startswith('sk-ant-'):
                     if _save_api_key('anthropic', api_key):
                         print("\n✓ API key saved! AI interpretation will be used on next run.")
+                        print("  (Using your MAX subscription - no extra charges)")
                     else:
-                        print("\n✗ Failed to save API key. Set ANTHROPIC_API_KEY environment variable instead.")
+                        print("\n✗ Failed to save. Set ANTHROPIC_API_KEY env var instead.")
                 else:
-                    print("\n✗ Invalid key format. Anthropic keys start with 'sk-ant-'")
+                    print("\n✗ Invalid format. Anthropic keys start with 'sk-ant-'")
             else:
-                print("\nSkipping AI setup. Using pattern matching only.")
+                print("\nSkipped. Using pattern matching only.")
+        else:
+            print("\nSkipped. Using pattern matching only.")
     except (KeyboardInterrupt, EOFError):
-        print("\n\nSkipping AI setup.")
+        print("\n\nSkipped AI setup.")
 
     print()
 
@@ -540,6 +554,11 @@ def _offer_ai_setup() -> None:
 def main() -> int:
     """Main entry point."""
     args = parse_args()
+
+    # Handle --setup flag (run setup and exit)
+    if args.setup:
+        _offer_ai_setup()
+        return 0
 
     # Validate arguments
     if not validate_args(args):
