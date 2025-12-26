@@ -1044,5 +1044,72 @@ Testing on axios and requests repositories revealed additional noise sources:
 
 ---
 
+## Phase 8: AI Interpretation Integration
+
+### Task 12: Connect AIInterpreter to Main Pipeline
+
+**Status:** ✅ Complete
+
+### Problem Statement
+Edge cases like user-facing error messages, sponsor content, CSS classes, and ambiguous descriptions cannot be resolved through pattern matching alone. The `ai_interpreter.py` module existed but was not connected to the main `generate_changelog.py` pipeline.
+
+### Solution Implemented
+
+#### 1. Import AIInterpreter
+Added import in `generate_changelog.py`:
+```python
+from ai_interpreter import AIInterpreter
+```
+
+#### 2. New CLI Arguments
+```bash
+AI Interpretation:
+  --ai                  Enable AI interpretation for ambiguous changes
+  --anthropic-key KEY   Anthropic API key for Claude-based interpretation
+  --openai-key KEY      OpenAI API key for GPT-based interpretation
+  --no-ai-fallback      Disable pattern-based fallback when AI unavailable
+```
+
+#### 3. ChangelogGenerator Updates
+- Added `ai_enabled` and `ai_client` parameters to constructor
+- AIInterpreter processes changes with `low` confidence or `diff_analysis` source
+- High-confidence AI results replace pattern-based interpretations
+
+#### 4. API Client Configuration
+The generator detects API clients from:
+1. CLI arguments (`--anthropic-key` or `--openai-key`)
+2. Environment variables (`ANTHROPIC_API_KEY` or `OPENAI_API_KEY`)
+
+Priority: Anthropic Claude → OpenAI GPT
+
+#### 5. Fallback Behavior
+- With `--ai` but no API key: Uses pattern-based fallback (default)
+- With `--ai` and `--no-ai-fallback`: Fails if no API key
+- Without `--ai`: Pattern-only mode (current default)
+
+### Usage Examples
+```bash
+# Pattern-only mode (default, backward compatible)
+python generate_changelog.py --last 50 --stdout
+
+# AI-enhanced mode with Anthropic Claude
+export ANTHROPIC_API_KEY="sk-..."
+python generate_changelog.py --last 50 --ai --stdout
+
+# AI-enhanced mode with OpenAI
+python generate_changelog.py --last 50 --ai --openai-key sk-... --stdout
+```
+
+### Files Modified
+- `generate_changelog.py` - Integrated AIInterpreter, added CLI arguments
+
+### Results
+- All 42 unit tests pass
+- Backward compatible (no change without `--ai` flag)
+- Security and dependency categories added to --category filter
+
+---
+
 *Document updated: 2024-12-26*
+*Phases complete: 1-8*
 *Document created for AIskils/repo-changelog skill enhancement*

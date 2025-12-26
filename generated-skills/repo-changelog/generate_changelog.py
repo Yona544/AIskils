@@ -34,6 +34,7 @@ from diff_parser import DiffParser
 from change_consolidator import ChangeConsolidator
 from changelog_formatter import ChangelogFormatter
 from breaking_change_detector import BreakingChangeDetector
+from ai_interpreter import AIInterpreter
 
 
 def parse_args() -> argparse.Namespace:
@@ -150,8 +151,31 @@ Examples:
     filter_group.add_argument(
         '--category',
         action='append',
-        choices=['feature', 'enhancement', 'bugfix', 'change', 'breaking', 'other'],
+        choices=['feature', 'enhancement', 'bugfix', 'change', 'breaking', 'security', 'dependency', 'other'],
         help='Only include specific categories (can be repeated)'
+    )
+
+    # AI interpretation options
+    ai_group = parser.add_argument_group('AI Interpretation')
+    ai_group.add_argument(
+        '--ai',
+        action='store_true',
+        help='Enable AI interpretation for ambiguous changes (requires API key)'
+    )
+    ai_group.add_argument(
+        '--anthropic-key',
+        metavar='KEY',
+        help='Anthropic API key for Claude-based interpretation'
+    )
+    ai_group.add_argument(
+        '--openai-key',
+        metavar='KEY',
+        help='OpenAI API key for GPT-based interpretation'
+    )
+    ai_group.add_argument(
+        '--no-ai-fallback',
+        action='store_true',
+        help='Disable pattern-based fallback when AI unavailable'
     )
 
     # Verbosity
@@ -209,13 +233,16 @@ def log(message: str, args: argparse.Namespace, level: str = 'info') -> None:
 class ChangelogGenerator:
     """Main changelog generation orchestrator."""
 
-    def __init__(self, config_path: Optional[str] = None, repo_path: str = '.'):
+    def __init__(self, config_path: Optional[str] = None, repo_path: str = '.',
+                 ai_enabled: bool = False, ai_client: Any = None):
         """
         Initialize the changelog generator.
 
         Args:
             config_path: Optional path to custom config file
             repo_path: Path to git repository
+            ai_enabled: Enable AI interpretation for ambiguous changes
+            ai_client: Pre-configured AI client (Anthropic or OpenAI)
         """
         self.config = get_config(config_path)
         self.repo_path = Path(repo_path).resolve()
@@ -226,6 +253,10 @@ class ChangelogGenerator:
         self.consolidator = ChangeConsolidator(config_path)
         self.formatter = ChangelogFormatter(config_path)
         self.breaking_detector = BreakingChangeDetector(config_path)
+
+        # Initialize AI interpreter
+        self.ai_interpreter = AIInterpreter(config_path, ai_client=ai_client)
+        self.ai_enabled = ai_enabled
 
     def generate(self, commit_range: Dict[str, Any],
                  version: Optional[str] = None,
@@ -263,6 +294,26 @@ class ChangelogGenerator:
                 commit.get('files_changed', []),
                 commit.get('subject', '')
             )
+
+            # Step 2a: Use AI interpretation for ambiguous changes if enabled
+            if self.ai_enabled:
+                enhanced_changes = []
+                for change in diff_changes:
+                    # Try AI interpretation for low confidence or diff_analysis source
+                    if change.get('confidence') == 'low' or change.get('source') == 'diff_analysis':
+                        ai_result = self.ai_interpreter.interpret_commit({
+                            'hash': commit.get('hash', ''),
+                            'subject': commit.get('subject', ''),
+                            'diff': commit.get('diff', ''),
+                            'files_changed': commit.get('files_changed', [])
+                        })
+                        if ai_result and ai_result.get('confidence') == 'high':
+                            # Use AI-enhanced result
+                            enhanced_changes.append(ai_result)
+                            continue
+                    enhanced_changes.append(change)
+                diff_changes = enhanced_changes
+
             all_changes.extend(diff_changes)
 
             # Detect breaking changes
@@ -394,11 +445,50 @@ def main() -> int:
         print(f"Error loading config: {e}")
         return 1
 
+    # Configure AI client if requested
+    ai_client = None
+    ai_enabled = args.ai
+
+    if ai_enabled:
+        # Try Anthropic first, then OpenAI
+        anthropic_key = args.anthropic_key or os.environ.get('ANTHROPIC_API_KEY')
+        openai_key = args.openai_key or os.environ.get('OPENAI_API_KEY')
+
+        if anthropic_key:
+            try:
+                import anthropic
+                ai_client = anthropic.Anthropic(api_key=anthropic_key)
+                log("AI interpretation enabled using Claude", args, 'verbose')
+            except ImportError:
+                log("Warning: anthropic package not installed. Run: pip install anthropic", args)
+            except Exception as e:
+                log(f"Warning: Could not initialize Anthropic client: {e}", args)
+
+        elif openai_key:
+            try:
+                import openai
+                ai_client = openai.OpenAI(api_key=openai_key)
+                log("AI interpretation enabled using GPT", args, 'verbose')
+            except ImportError:
+                log("Warning: openai package not installed. Run: pip install openai", args)
+            except Exception as e:
+                log(f"Warning: Could not initialize OpenAI client: {e}", args)
+
+        if ai_enabled and not ai_client:
+            if args.no_ai_fallback:
+                print("Error: --ai specified but no API key provided and --no-ai-fallback set")
+                print("Set ANTHROPIC_API_KEY or OPENAI_API_KEY, or use --anthropic-key/--openai-key")
+                return 1
+            else:
+                log("AI client unavailable, using pattern-based fallback", args)
+
     # Initialize generator
     try:
         generator = ChangelogGenerator(
             config_path=config_path,
-            repo_path=args.repo
+            repo_path=args.repo,
+            ai_enabled=ai_enabled,
+            ai_client=ai_client
         )
     except Exception as e:
         print(f"Error initializing generator: {e}")

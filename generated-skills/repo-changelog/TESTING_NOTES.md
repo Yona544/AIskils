@@ -432,5 +432,101 @@ These would require AI interpretation or manual review to filter correctly.
 
 ---
 
+---
+
+## Phase 8: AI Interpretation Integration
+
+### Changes Made
+
+**Problem Identified**: Edge cases like user-facing error messages, sponsor content, CSS classes, and ambiguous descriptions cannot be resolved through pattern matching alone. These require semantic understanding.
+
+**Solution**: Integrated the existing `AIInterpreter` module into the main `generate_changelog.py` pipeline.
+
+### Implementation Details
+
+#### 1. New CLI Arguments (generate_changelog.py)
+
+```bash
+AI Interpretation:
+  --ai                  Enable AI interpretation for ambiguous changes
+  --anthropic-key KEY   Anthropic API key for Claude-based interpretation
+  --openai-key KEY      OpenAI API key for GPT-based interpretation
+  --no-ai-fallback      Disable pattern-based fallback when AI unavailable
+```
+
+#### 2. ChangelogGenerator Updates
+
+- Added `ai_enabled` and `ai_client` parameters to constructor
+- AIInterpreter now processes changes with `low` confidence or `diff_analysis` source
+- High-confidence AI results replace pattern-based interpretations
+
+#### 3. API Client Configuration
+
+The generator automatically detects API clients from:
+1. CLI arguments (`--anthropic-key` or `--openai-key`)
+2. Environment variables (`ANTHROPIC_API_KEY` or `OPENAI_API_KEY`)
+
+Priority: Anthropic Claude → OpenAI GPT
+
+#### 4. Fallback Behavior
+
+- With `--ai` but no API key: Uses pattern-based fallback (default)
+- With `--ai` and `--no-ai-fallback`: Fails if no API key available
+- Without `--ai`: Pattern-only mode (current default behavior)
+
+### Usage Examples
+
+```bash
+# Pattern-only mode (default, backward compatible)
+python generate_changelog.py --last 50 --stdout
+
+# AI-enhanced mode with Anthropic Claude
+export ANTHROPIC_API_KEY="sk-..."
+python generate_changelog.py --last 50 --ai --stdout
+
+# AI-enhanced mode with OpenAI
+python generate_changelog.py --last 50 --ai --openai-key sk-... --stdout
+
+# AI mode with strict requirement (fail if no API key)
+python generate_changelog.py --last 50 --ai --no-ai-fallback --stdout
+```
+
+### Expected Improvements with AI
+
+When AI interpretation is enabled, these edge cases are better handled:
+
+| Edge Case | Pattern-Only | With AI |
+|-----------|-------------|---------|
+| User-facing error messages | Often included | Filtered as internal |
+| Sponsor promotional content | Sometimes included | Identified as non-user-facing |
+| CSS class changes | Ambiguous categorization | Proper context (UI change or internal) |
+| Ambiguous "Updated text" entries | Generic description | Meaningful user impact description |
+
+### Test Results
+
+All 42 unit tests continue to pass after integration.
+
+```
+----------------------------------------------------------------------
+Ran 42 tests in 0.121s
+
+OK
+```
+
+### Remaining Considerations
+
+1. **API Costs**: AI interpretation adds API call costs (~$0.01-0.05 per commit with Haiku)
+2. **Latency**: Each commit adds ~0.5-1s for AI processing
+3. **Rate Limits**: Large repositories may hit API rate limits
+4. **Privacy**: Diff content is sent to external AI APIs
+
+### Recommendations
+
+- Use `--ai` for final release notes when quality matters
+- Use pattern-only mode for frequent/CI runs to minimize costs
+- Consider caching AI responses for repeated analysis
+
+---
+
 *Document updated: December 26, 2025*
-*Testing rounds: 2 (Phase 6 + Phase 7)*
+*Testing rounds: 3 (Phase 6 + Phase 7 + Phase 8)*
