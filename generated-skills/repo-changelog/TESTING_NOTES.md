@@ -522,11 +522,91 @@ OK
 
 ### Recommendations
 
-- Use `--ai` for final release notes when quality matters
-- Use pattern-only mode for frequent/CI runs to minimize costs
+- AI is now enabled by default when API keys are available
+- Use `--no-ai` for CI runs to minimize costs and ensure deterministic output
 - Consider caching AI responses for repeated analysis
 
 ---
 
+## Phase 9: Easy AI Setup
+
+### Changes Made
+
+**Problem Identified**: Setting up AI interpretation required manually configuring environment variables, which was friction for new users.
+
+**Solution**: Implemented an interactive setup flow that:
+1. Detects when no API key is available
+2. Offers to open browser to Anthropic Console
+3. Allows pasting the API key directly
+4. Saves the key securely to `~/.config/repo-changelog/api_keys.json`
+
+### Implementation Details
+
+#### 1. API Key Resolution Order
+
+The generator now checks for API keys in this order:
+1. CLI arguments (`--anthropic-key` or `--openai-key`)
+2. Environment variables (`ANTHROPIC_API_KEY` or `OPENAI_API_KEY`)
+3. Saved config file (`~/.config/repo-changelog/api_keys.json`)
+
+#### 2. Interactive Setup (generate_changelog.py)
+
+When no API key is available, users see:
+```
+============================================================
+AI Interpretation is not configured
+============================================================
+
+AI interpretation improves changelog quality by understanding
+code changes in context. Without it, pattern matching is used.
+
+Options to enable AI:
+  1. Set environment variable: export ANTHROPIC_API_KEY='sk-...'
+  2. Pass via CLI: --anthropic-key sk-...
+  3. Run setup now (opens browser to get API key)
+
+To skip this message, use --no-ai or --quiet
+
+Would you like to set up AI now? [y/N]:
+```
+
+If user answers 'y':
+- Browser opens to https://console.anthropic.com/settings/keys
+- User can paste API key directly
+- Key is validated (must start with `sk-ant-`)
+- Key is saved securely with 0600 permissions
+
+#### 3. Saved Config Security
+
+- Config stored in `~/.config/repo-changelog/api_keys.json`
+- File permissions set to 0600 (owner read/write only)
+- JSON format for easy manual editing if needed
+
+### Usage Examples
+
+```bash
+# First run without API key - interactive setup offered
+python generate_changelog.py --last 20 --stdout
+
+# Skip setup prompt
+python generate_changelog.py --last 20 --stdout --quiet
+
+# Disable AI completely
+python generate_changelog.py --last 20 --stdout --no-ai
+
+# After setup, AI is used automatically
+python generate_changelog.py --last 20 --stdout
+```
+
+### Breaking Change from Phase 8
+
+| Before (Phase 8) | After (Phase 9) |
+|------------------|-----------------|
+| `--ai` flag to enable | AI enabled by default when keys available |
+| No setup helper | Interactive browser-based setup |
+| Env vars only | CLI > env vars > saved config |
+
+---
+
 *Document updated: December 26, 2025*
-*Testing rounds: 3 (Phase 6 + Phase 7 + Phase 8)*
+*Testing rounds: 4 (Phase 6 + Phase 7 + Phase 8 + Phase 9)*

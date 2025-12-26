@@ -424,6 +424,119 @@ class ChangelogGenerator:
             )
 
 
+def _get_config_dir() -> Path:
+    """Get or create the config directory for saved settings."""
+    config_dir = Path.home() / '.config' / 'repo-changelog'
+    config_dir.mkdir(parents=True, exist_ok=True)
+    return config_dir
+
+
+def _load_saved_api_key(provider: str) -> Optional[str]:
+    """
+    Load a saved API key from config.
+
+    Args:
+        provider: 'anthropic' or 'openai'
+
+    Returns:
+        API key string or None if not found
+    """
+    import json
+    config_file = _get_config_dir() / 'api_keys.json'
+
+    if not config_file.exists():
+        return None
+
+    try:
+        with open(config_file, 'r') as f:
+            keys = json.load(f)
+        return keys.get(provider)
+    except (json.JSONDecodeError, IOError):
+        return None
+
+
+def _save_api_key(provider: str, api_key: str) -> bool:
+    """
+    Save an API key to config for future use.
+
+    Args:
+        provider: 'anthropic' or 'openai'
+        api_key: The API key to save
+
+    Returns:
+        True if saved successfully
+    """
+    import json
+    config_file = _get_config_dir() / 'api_keys.json'
+
+    # Load existing keys
+    keys = {}
+    if config_file.exists():
+        try:
+            with open(config_file, 'r') as f:
+                keys = json.load(f)
+        except (json.JSONDecodeError, IOError):
+            pass
+
+    # Update and save
+    keys[provider] = api_key
+    try:
+        with open(config_file, 'w') as f:
+            json.dump(keys, f, indent=2)
+        # Secure the file (owner read/write only)
+        config_file.chmod(0o600)
+        return True
+    except IOError:
+        return False
+
+
+def _offer_ai_setup() -> None:
+    """
+    Offer to set up AI integration when no API key is available.
+    Opens browser to Anthropic console if user agrees.
+    """
+    import webbrowser
+
+    print("\n" + "=" * 60)
+    print("AI Interpretation is not configured")
+    print("=" * 60)
+    print("\nAI interpretation improves changelog quality by understanding")
+    print("code changes in context. Without it, pattern matching is used.")
+    print("\nOptions to enable AI:")
+    print("  1. Set environment variable: export ANTHROPIC_API_KEY='sk-...'")
+    print("  2. Pass via CLI: --anthropic-key sk-...")
+    print("  3. Run setup now (opens browser to get API key)")
+    print("\nTo skip this message, use --no-ai or --quiet")
+    print()
+
+    try:
+        response = input("Would you like to set up AI now? [y/N]: ").strip().lower()
+        if response in ('y', 'yes'):
+            print("\nOpening Anthropic Console to create an API key...")
+            print("URL: https://console.anthropic.com/settings/keys")
+            webbrowser.open('https://console.anthropic.com/settings/keys')
+
+            print("\nAfter creating your API key, paste it here.")
+            print("(It will be saved to ~/.config/repo-changelog/api_keys.json)")
+            print()
+
+            api_key = input("Paste your Anthropic API key (or press Enter to skip): ").strip()
+            if api_key:
+                if api_key.startswith('sk-ant-'):
+                    if _save_api_key('anthropic', api_key):
+                        print("\n✓ API key saved! AI interpretation will be used on next run.")
+                    else:
+                        print("\n✗ Failed to save API key. Set ANTHROPIC_API_KEY environment variable instead.")
+                else:
+                    print("\n✗ Invalid key format. Anthropic keys start with 'sk-ant-'")
+            else:
+                print("\nSkipping AI setup. Using pattern matching only.")
+    except (KeyboardInterrupt, EOFError):
+        print("\n\nSkipping AI setup.")
+
+    print()
+
+
 def main() -> int:
     """Main entry point."""
     args = parse_args()
@@ -445,9 +558,9 @@ def main() -> int:
     ai_enabled = not args.no_ai  # AI is ON by default unless --no-ai
 
     if ai_enabled:
-        # Try Anthropic first, then OpenAI
-        anthropic_key = args.anthropic_key or os.environ.get('ANTHROPIC_API_KEY')
-        openai_key = args.openai_key or os.environ.get('OPENAI_API_KEY')
+        # Try to get API key from: CLI args > env vars > saved config
+        anthropic_key = args.anthropic_key or os.environ.get('ANTHROPIC_API_KEY') or _load_saved_api_key('anthropic')
+        openai_key = args.openai_key or os.environ.get('OPENAI_API_KEY') or _load_saved_api_key('openai')
 
         if anthropic_key:
             try:
@@ -455,7 +568,7 @@ def main() -> int:
                 ai_client = anthropic.Anthropic(api_key=anthropic_key)
                 log("AI interpretation enabled using Claude", args, 'verbose')
             except ImportError:
-                log("Note: anthropic package not installed. Using pattern matching.", args, 'verbose')
+                log("Note: anthropic package not installed. Run: pip install anthropic", args, 'verbose')
             except Exception as e:
                 log(f"Note: Could not initialize Anthropic client: {e}", args, 'verbose')
 
@@ -465,14 +578,15 @@ def main() -> int:
                 ai_client = openai.OpenAI(api_key=openai_key)
                 log("AI interpretation enabled using GPT", args, 'verbose')
             except ImportError:
-                log("Note: openai package not installed. Using pattern matching.", args, 'verbose')
+                log("Note: openai package not installed. Run: pip install openai", args, 'verbose')
             except Exception as e:
                 log(f"Note: Could not initialize OpenAI client: {e}", args, 'verbose')
 
-        # If no client available, just use pattern matching (no error, it's the fallback)
+        # If no client available, offer to set up
         if not ai_client:
             ai_enabled = False
-            log("No AI API key found. Using pattern-based interpretation.", args, 'verbose')
+            if not args.quiet:
+                _offer_ai_setup()
 
     # Initialize generator
     try:
