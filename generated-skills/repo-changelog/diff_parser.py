@@ -76,6 +76,11 @@ class DiffParser:
         '*.hhc',
         '*.hhk',
         '*.hhp',
+        # Lazarus/FPC project files
+        '*.lpi',
+        '*.lps',
+        '*.lpk',
+        '*.compiled',
     ]
 
     # Patterns to skip in diff content (hashes, checksums, CI/CD, tests, etc.)
@@ -157,6 +162,27 @@ class DiffParser:
         # SVG path data (very noisy)
         r'^M\d+[,\s]\d+\s*[LCZHVlchvz]',  # M100,80 C250...
         r'^M\d+\s+\d+h\d+v\d+H\d+z',  # M0 0h108v108H0z
+        # Lazarus/FPC patterns
+        r'lib/\$\(TargetCPU\)',
+        r'-dUseCThreads',
+        r'-dBorland',
+        r'-dVer\d+',
+        r'-dDelphi\d+',
+        r'-dCompiler\d+',
+        r'-dPURE',
+        r'LCLWidgetType',
+        r'\$\(ProjOutDir\)',
+        r'\.lpr\b',  # Lazarus project file reference
+        r'\.lpi\b',  # Lazarus project info
+        r'\.lpk\b',  # Lazarus package
+        # XML encoding declarations
+        r'encoding=',
+        r'xml version=',
+        # Empty or whitespace-only strings
+        r'^[\s#\r\n]+$',
+        # Delphi unit file references in diffs
+        r'^\w+\.pas$',
+        r'^\w+\.dfm$',
     ]
 
     # File type categories for context
@@ -381,6 +407,10 @@ class DiffParser:
             return 'change'
         # Dependency bumps - group together
         if re.match(r'^build\(deps(-dev)?\):', message_lower):
+            return 'dependency'
+
+        # Delphi/CEF version updates (common pattern: "Update to CEF X.Y.Z")
+        if re.match(r'^update\s+to\s+(cef|chromium|skia|indy|synapse)\s+\d+', message_lower):
             return 'dependency'
 
         # Check for keywords
