@@ -181,13 +181,42 @@ class DiffParser:
         return changes
 
     def _should_ignore_file(self, path: str) -> bool:
-        """Check if a file should be ignored (lock files, generated files)."""
+        """Check if a file should be ignored (lock files, generated files, test files)."""
         from pathlib import Path
         import fnmatch
 
-        filename = Path(path).name
+        p = Path(path)
+        filename = p.name
+        path_lower = path.lower()
 
+        # Check for test directories in path (handles **/__tests__/** patterns)
+        test_dir_patterns = ['__tests__', '/test/', '/tests/', '/spec/', '/specs/']
+        if any(pattern in path_lower for pattern in test_dir_patterns):
+            return True
+
+        # Check for test file suffixes
+        test_suffixes = ['.test.ts', '.test.js', '.test.tsx', '.test.jsx',
+                        '.spec.ts', '.spec.js', '.spec.tsx', '.spec.jsx',
+                        '_test.py', '_test.go']
+        if any(filename.lower().endswith(suffix) for suffix in test_suffixes):
+            return True
+        if filename.lower().startswith('test_') and filename.endswith('.py'):
+            return True
+
+        # Check for CI/CD directories
+        if '/.github/workflows/' in path or path.startswith('.github/workflows/'):
+            return True
+
+        # Check for generated/vendor directories
+        vendor_patterns = ['/node_modules/', '/vendor/', '/dist/', '/build/']
+        if any(pattern in path for pattern in vendor_patterns):
+            return True
+
+        # Standard fnmatch for simple patterns
         for pattern in self.IGNORE_FILES:
+            # Skip ** patterns (handled above)
+            if '**' in pattern:
+                continue
             if fnmatch.fnmatch(filename, pattern):
                 return True
             if fnmatch.fnmatch(path, pattern):
@@ -374,11 +403,26 @@ class DiffParser:
         return changes
 
     def _extract_additions(self, diff_content: str) -> List[str]:
-        """Extract added lines from diff."""
+        """Extract added lines from diff, filtering out test file content."""
         additions = []
+        current_file = None
+        skip_current_file = False
+
         for line in diff_content.split('\n'):
-            if line.startswith('+') and not line.startswith('+++'):
-                additions.append(line[1:])  # Remove the '+' prefix
+            # Detect file being diffed
+            if line.startswith('diff --git'):
+                # Extract file path: "diff --git a/path/file b/path/file"
+                parts = line.split(' b/')
+                if len(parts) > 1:
+                    current_file = parts[1]
+                    skip_current_file = self._should_ignore_file(current_file)
+                else:
+                    skip_current_file = False
+            elif line.startswith('+') and not line.startswith('+++'):
+                # Only add if current file is not ignored
+                if not skip_current_file:
+                    additions.append(line[1:])  # Remove the '+' prefix
+
         return additions
 
     def _looks_like_code(self, text: str) -> bool:
