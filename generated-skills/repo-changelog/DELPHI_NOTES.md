@@ -266,5 +266,60 @@ Update to Skia mXXX -> dependency
 
 ---
 
+## Phase 3: xHarbour Analysis
+
+### Repositories Analyzed
+
+| Repository | Focus | Commit Style |
+|------------|-------|--------------|
+| xharbour | xHarbour compiler | `Description (#PR)` |
+| sqlrddpp-v2 | SQL RDD for Harbour | `Update file: description` |
+| harbour_and_xharbour_builds | Pre-built binaries | Build releases |
+
+### xHarbour File Extensions
+
+```
+.prg  - Harbour/xHarbour source code
+.ch   - Harbour header/include files
+.hbp  - Harbour project file
+.hbc  - Harbour build config
+.hbm  - Harbour make file
+.hbs  - Harbour script
+.hrb  - Harbour portable executable
+```
+
+### xHarbour Noise Patterns Added
+
+```python
+r'Update ChangeLog'      # Auto-update commits
+r'ChangeLog SVN version'
+r'HB_\w+_\w+'           # Internal constants (HB_FINITE_DBL)
+r'__GNUC__'             # Compiler flags
+r'__clang__'
+r'LONG_PTR'
+r'ULONG_PTR'
+r'MinGW'
+r'xbuild\.\w+\.ini'     # Build configs
+```
+
+### xHarbour Commit Patterns
+
+```
+# PR references at end - now stripped
+"Fixed wrong pp behaviour (#103)" -> "Fixed wrong pp behaviour"
+
+# "Pacify" keyword now recognized as bugfix
+"Pacify warnings" -> category: bugfix
+```
+
+### Results After Phase 3 Improvements
+
+| Repository | Before | After | Improvement |
+|------------|--------|-------|-------------|
+| xharbour | 3 | 20 | **567%** |
+| sqlrddpp-v2 | 19 | 19 | (already good) |
+
+---
+
 *Analysis completed: December 26, 2025*
-*Repositories: 8 Delphi projects (6 + 2)*
+*Repositories: 11 projects (6 Delphi + 2 Delphi + 3 xHarbour)*

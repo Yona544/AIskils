@@ -81,6 +81,11 @@ class DiffParser:
         '*.lps',
         '*.lpk',
         '*.compiled',
+        # xHarbour/Harbour build artifacts
+        '*.hrb',  # Harbour portable executable
+        '*.hbm',  # Harbour make file
+        '*.hbc',  # Harbour build config
+        'ChangeLog',  # Often auto-updated
     ]
 
     # Patterns to skip in diff content (hashes, checksums, CI/CD, tests, etc.)
@@ -183,6 +188,16 @@ class DiffParser:
         # Delphi unit file references in diffs
         r'^\w+\.pas$',
         r'^\w+\.dfm$',
+        # xHarbour/Harbour patterns
+        r'Update ChangeLog',  # Auto-update commits
+        r'ChangeLog SVN version',
+        r'HB_\w+_\w+',  # Internal HB_ constants (HB_FINITE_DBL, HB_CURLOPT_*)
+        r'__GNUC__',  # Compiler flags
+        r'__clang__',
+        r'LONG_PTR',
+        r'ULONG_PTR',
+        r'MinGW',
+        r'xbuild\.\w+\.ini',  # Build config files
     ]
 
     # File type categories for context
@@ -190,11 +205,12 @@ class DiffParser:
         'ui': ['.html', '.css', '.scss', '.less', '.jsx', '.tsx', '.vue', '.svelte', '.dfm', '.fmx'],
         'config': ['.json', '.yaml', '.yml', '.toml', '.ini', '.env', '.config'],
         'docs': ['.md', '.txt', '.rst', '.doc', '.docx', '.pdf'],
-        'code': ['.py', '.js', '.ts', '.go', '.java', '.cs', '.rb', '.php', '.swift', '.kt', '.pas', '.dpr', '.dpk'],
+        'code': ['.py', '.js', '.ts', '.go', '.java', '.cs', '.rb', '.php', '.swift', '.kt', '.pas', '.dpr', '.dpk', '.prg', '.ch'],
         'data': ['.sql', '.csv', '.xml'],
         'build': ['Makefile', 'Dockerfile', '.sh', '.bat', '.ps1', 'package.json', 'requirements.txt'],
         'test': ['test_', '_test.', '.test.', 'spec.'],
-        'delphi': ['.pas', '.dpr', '.dpk', '.dfm', '.fmx', '.inc']
+        'delphi': ['.pas', '.dpr', '.dpk', '.dfm', '.fmx', '.inc'],
+        'harbour': ['.prg', '.ch', '.hbp', '.hbc', '.hbm', '.hbs']
     }
 
     # Patterns that indicate user-facing changes
@@ -345,6 +361,10 @@ class DiffParser:
         # Remove ticket references
         clean_subject = re.sub(r'\[?[A-Z]+-\d+\]?\s*', '', clean_subject)
         clean_subject = re.sub(r'#\d+\s*', '', clean_subject)
+        # Remove PR references at end like "(#106)"
+        clean_subject = re.sub(r'\s*\(#\d+\)\s*$', '', clean_subject)
+        # Clean up empty parentheses left over
+        clean_subject = re.sub(r'\s*\(\s*\)\s*', '', clean_subject)
 
         # Remove WIP, TODO prefixes
         clean_subject = re.sub(r'^(WIP|TODO|FIXME|HACK):\s*', '', clean_subject, flags=re.IGNORECASE)
@@ -416,7 +436,7 @@ class DiffParser:
         # Check for keywords
         if any(word in message_lower for word in ['add', 'new', 'create', 'implement', 'introduce']):
             return 'feature'
-        if any(word in message_lower for word in ['fix', 'bug', 'issue', 'error', 'crash', 'resolve']):
+        if any(word in message_lower for word in ['fix', 'bug', 'issue', 'error', 'crash', 'resolve', 'pacify']):
             return 'bugfix'
         if any(word in message_lower for word in ['security', 'cve', 'vulnerability', 'exploit']):
             return 'security'
