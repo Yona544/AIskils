@@ -158,24 +158,19 @@ Examples:
     # AI interpretation options
     ai_group = parser.add_argument_group('AI Interpretation')
     ai_group.add_argument(
-        '--ai',
+        '--no-ai',
         action='store_true',
-        help='Enable AI interpretation for ambiguous changes (requires API key)'
+        help='Disable AI interpretation (use pattern matching only)'
     )
     ai_group.add_argument(
         '--anthropic-key',
         metavar='KEY',
-        help='Anthropic API key for Claude-based interpretation'
+        help='Anthropic API key (default: ANTHROPIC_API_KEY env var)'
     )
     ai_group.add_argument(
         '--openai-key',
         metavar='KEY',
-        help='OpenAI API key for GPT-based interpretation'
-    )
-    ai_group.add_argument(
-        '--no-ai-fallback',
-        action='store_true',
-        help='Disable pattern-based fallback when AI unavailable'
+        help='OpenAI API key (default: OPENAI_API_KEY env var)'
     )
 
     # Verbosity
@@ -445,9 +440,9 @@ def main() -> int:
         print(f"Error loading config: {e}")
         return 1
 
-    # Configure AI client if requested
+    # Configure AI client (enabled by default when API keys are available)
     ai_client = None
-    ai_enabled = args.ai
+    ai_enabled = not args.no_ai  # AI is ON by default unless --no-ai
 
     if ai_enabled:
         # Try Anthropic first, then OpenAI
@@ -460,9 +455,9 @@ def main() -> int:
                 ai_client = anthropic.Anthropic(api_key=anthropic_key)
                 log("AI interpretation enabled using Claude", args, 'verbose')
             except ImportError:
-                log("Warning: anthropic package not installed. Run: pip install anthropic", args)
+                log("Note: anthropic package not installed. Using pattern matching.", args, 'verbose')
             except Exception as e:
-                log(f"Warning: Could not initialize Anthropic client: {e}", args)
+                log(f"Note: Could not initialize Anthropic client: {e}", args, 'verbose')
 
         elif openai_key:
             try:
@@ -470,17 +465,14 @@ def main() -> int:
                 ai_client = openai.OpenAI(api_key=openai_key)
                 log("AI interpretation enabled using GPT", args, 'verbose')
             except ImportError:
-                log("Warning: openai package not installed. Run: pip install openai", args)
+                log("Note: openai package not installed. Using pattern matching.", args, 'verbose')
             except Exception as e:
-                log(f"Warning: Could not initialize OpenAI client: {e}", args)
+                log(f"Note: Could not initialize OpenAI client: {e}", args, 'verbose')
 
-        if ai_enabled and not ai_client:
-            if args.no_ai_fallback:
-                print("Error: --ai specified but no API key provided and --no-ai-fallback set")
-                print("Set ANTHROPIC_API_KEY or OPENAI_API_KEY, or use --anthropic-key/--openai-key")
-                return 1
-            else:
-                log("AI client unavailable, using pattern-based fallback", args)
+        # If no client available, just use pattern matching (no error, it's the fallback)
+        if not ai_client:
+            ai_enabled = False
+            log("No AI API key found. Using pattern-based interpretation.", args, 'verbose')
 
     # Initialize generator
     try:
