@@ -27,19 +27,23 @@ class AIInterpreter:
     - Fallback to pattern-based interpretation
     - Caching for repeated requests
     - Multiple AI provider support (designed for Claude)
+    - Audience-specific prompts (end-users, developers, executives)
     """
 
     def __init__(self, config_path: Optional[str] = None,
-                 ai_client: Optional[Any] = None):
+                 ai_client: Optional[Any] = None,
+                 audience: str = 'end-users'):
         """
         Initialize the AI interpreter.
 
         Args:
             config_path: Optional path to custom config file
             ai_client: Optional AI client instance (e.g., Anthropic client)
+            audience: Target audience ('end-users', 'developers', 'executives')
         """
         self.config = get_config(config_path)
         self.ai_client = ai_client
+        self.audience = audience
         self._cache: Dict[str, str] = {}
 
         # Load settings from config
@@ -48,30 +52,83 @@ class AIInterpreter:
         self.max_files = self.config.get('ai_interpretation', 'max_files_per_commit', default=10)
         self.fallback_enabled = self.config.get('ai_interpretation', 'fallback_to_patterns', default=True)
 
-        # Load prompt template
-        self.prompt_template = self.config.get('ai_interpretation', 'prompt_template', default=self._get_default_prompt())
+        # Load prompt template based on audience
+        self.prompt_template = self._get_prompt_for_audience(audience)
 
-    def _get_default_prompt(self) -> str:
-        """Get default prompt template."""
+    def _get_prompt_for_audience(self, audience: str) -> str:
+        """Get prompt template for the target audience."""
+        if audience == 'developers':
+            return self._get_developer_prompt()
+        elif audience == 'executives':
+            return self._get_executive_prompt()
+        else:  # end-users (default)
+            return self._get_end_user_prompt()
+
+    def _get_end_user_prompt(self) -> str:
+        """Prompt for end-user audience."""
         return """Analyze this code change and describe what it does in ONE sentence.
 
 Rules:
-- Write for END USERS, not developers
-- Do NOT mention: function names, variable names, file paths, class names
-- Do NOT use technical jargon
+- Write for END USERS who don't know programming
+- Do NOT mention: function names, variable names, file paths, class names, APIs
+- Do NOT use technical jargon (no "refactor", "migrate", "endpoint", "database")
 - Focus on what the USER will experience differently
-- If purely internal with no user impact, respond with: "Internal improvement"
-- Keep response under 100 characters
+- Use simple language like "You can now..." or "Fixed an issue where..."
+- If purely internal with no user impact, respond with: "INTERNAL_ONLY"
+- Keep response under 80 characters
 
 Commit message: {commit_message}
 Files changed: {files_changed}
 
-Diff:
+Diff (first 2000 chars):
 ```
 {diff_content}
 ```
 
 User-friendly description:"""
+
+    def _get_developer_prompt(self) -> str:
+        """Prompt for developer audience."""
+        return """Analyze this code change and describe what it does in ONE sentence.
+
+Rules:
+- Write for DEVELOPERS who understand code
+- Be technically accurate - mention affected components/modules
+- Include relevant technical details (API changes, breaking changes, etc.)
+- Keep response under 150 characters
+- Use precise technical terminology
+
+Commit message: {commit_message}
+Files changed: {files_changed}
+
+Diff (first 2000 chars):
+```
+{diff_content}
+```
+
+Technical description:"""
+
+    def _get_executive_prompt(self) -> str:
+        """Prompt for executive audience."""
+        return """Analyze this code change and provide a ONE-LINE business summary.
+
+Rules:
+- Write for EXECUTIVES who care about business impact
+- Focus on: customer value, revenue impact, risk reduction, efficiency gains
+- Categorize as one of: New Capability | Improvement | Fix | Infrastructure
+- Do NOT use technical terms
+- Maximum 15 words
+- Example: "New Capability: Customer export feature enables bulk data downloads"
+- If purely internal/technical with no business impact, respond with: "INTERNAL_ONLY"
+
+Commit message: {commit_message}
+Files changed: {files_changed}
+
+Business summary:"""
+
+    def _get_default_prompt(self) -> str:
+        """Get default prompt template (end-users)."""
+        return self._get_end_user_prompt()
 
     def interpret_commit(self, commit: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """

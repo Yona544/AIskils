@@ -5,6 +5,7 @@ bullet points, and optional footnotes.
 
 Now uses config.yaml for all customizable settings.
 Outputs to RELEASE_NOTES folder with timestamps.
+Supports audience-specific formatting (end-users, developers, executives).
 """
 
 import re
@@ -18,6 +19,12 @@ try:
     from .config_loader import get_config
 except ImportError:
     from config_loader import get_config
+
+# Import audience profiles
+try:
+    from .audience_profiles import get_category_names, get_profile, get_term_replacements
+except ImportError:
+    from audience_profiles import get_category_names, get_profile, get_term_replacements
 
 
 class ChangelogFormatter:
@@ -57,7 +64,9 @@ class ChangelogFormatter:
     def format_changelog(self, grouped_changes: Dict[str, List[Dict[str, Any]]],
                          version: Optional[str] = None,
                          release_date: Optional[str] = None,
-                         footnotes: Optional[List[str]] = None) -> str:
+                         footnotes: Optional[List[str]] = None,
+                         audience: str = 'end-users',
+                         stats: Optional[Dict[str, Any]] = None) -> str:
         """
         Format changes into a complete changelog markdown.
 
@@ -66,10 +75,16 @@ class ChangelogFormatter:
             version: Optional version string (e.g., "v1.1.0")
             release_date: Optional release date
             footnotes: Optional list of footnote strings
+            audience: Target audience ('end-users', 'developers', 'executives')
+            stats: Optional statistics dictionary
 
         Returns:
             Formatted markdown string
         """
+        # Use executive format for executives
+        if audience == 'executives':
+            return self._format_executive_summary(grouped_changes, version, stats)
+
         lines = []
 
         # Header
@@ -77,6 +92,9 @@ class ChangelogFormatter:
         if header:
             lines.append(header)
             lines.append('')
+
+        # Get audience-specific category names
+        category_names = get_category_names(audience)
 
         # Sort categories by order from config
         sorted_categories = self._get_sorted_categories(list(grouped_changes.keys()))
@@ -93,7 +111,7 @@ class ChangelogFormatter:
             if not changes:
                 continue
 
-            section = self._format_category_section(category, changes)
+            section = self._format_category_section(category, changes, audience, category_names)
             if section:
                 lines.append(section)
                 lines.append('')
@@ -126,14 +144,19 @@ class ChangelogFormatter:
         return header
 
     def _format_category_section(self, category: str,
-                                  changes: List[Dict[str, Any]]) -> str:
+                                  changes: List[Dict[str, Any]],
+                                  audience: str = 'end-users',
+                                  category_names: Optional[Dict[str, str]] = None) -> str:
         """Format a single category section."""
         cat_config = self._get_category_config(category)
 
         lines = []
 
-        # Section heading
-        heading = cat_config.get('heading', category.title())
+        # Section heading - use audience-specific names if available
+        if category_names and category in category_names:
+            heading = category_names[category]
+        else:
+            heading = cat_config.get('heading', category.title())
         lines.append(f"## {heading}")
         lines.append('')
 
@@ -143,7 +166,7 @@ class ChangelogFormatter:
 
         # Bullet points
         for change in display_changes:
-            bullet = self._format_bullet_point(change)
+            bullet = self._format_bullet_point(change, audience)
             if bullet:
                 lines.append(bullet)
 
@@ -153,7 +176,8 @@ class ChangelogFormatter:
 
         return '\n'.join(lines)
 
-    def _format_bullet_point(self, change: Dict[str, Any]) -> str:
+    def _format_bullet_point(self, change: Dict[str, Any],
+                              audience: str = 'end-users') -> str:
         """Format a single change as a bullet point."""
         description = change.get('description', '')
 
@@ -163,8 +187,75 @@ class ChangelogFormatter:
         # Clean up the description
         description = self._clean_description(description)
 
+        # Apply term replacements for end-users
+        if audience == 'end-users':
+            description = self._apply_term_replacements(description)
+
         # Format as bullet point
         return f"- {description}"
+
+    def _apply_term_replacements(self, text: str) -> str:
+        """Replace technical terms with user-friendly language."""
+        replacements = get_term_replacements()
+        for pattern, replacement in replacements.items():
+            text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
+        return text
+
+    def _format_executive_summary(self, grouped_changes: Dict[str, List[Dict[str, Any]]],
+                                   version: Optional[str] = None,
+                                   stats: Optional[Dict[str, Any]] = None) -> str:
+        """Format changes as an executive summary."""
+        lines = []
+
+        # Header
+        if version:
+            lines.append(f"## Release Summary - {version}")
+        else:
+            lines.append("## Release Summary")
+        lines.append('')
+
+        category_names = get_category_names('executives')
+
+        # Aggregate counts by business category
+        business_categories = {
+            'New Capabilities': [],
+            'Improvements': [],
+            'Stability & Fixes': [],
+            'Security Updates': [],
+            'Important Changes': [],
+        }
+
+        for category, changes in grouped_changes.items():
+            display_name = category_names.get(category, category.title())
+            if display_name in business_categories:
+                business_categories[display_name].extend(changes)
+
+        # Format each business category with counts
+        for biz_cat, changes in business_categories.items():
+            if not changes:
+                continue
+
+            count = len(changes)
+            if count == 1:
+                # Show single item description
+                desc = changes[0].get('description', '')
+                if desc and desc != 'INTERNAL_ONLY':
+                    desc = self._clean_description(desc)[:60]
+                    lines.append(f"**{biz_cat}**: {desc}")
+            else:
+                # Show count and summary
+                lines.append(f"**{biz_cat}** ({count})")
+
+        lines.append('')
+
+        # Add overall stats if available
+        if stats:
+            total_commits = stats.get('total_commits', 0)
+            total_changes = stats.get('total_changes', 0)
+            if total_commits or total_changes:
+                lines.append(f"*{total_changes} changes from {total_commits} commits*")
+
+        return '\n'.join(lines)
 
     def _clean_description(self, description: str) -> str:
         """Clean and format a description for output."""
@@ -236,7 +327,8 @@ class ChangelogFormatter:
 
     def format_slack_message(self, grouped_changes: Dict[str, List[Dict[str, Any]]],
                               version: Optional[str] = None,
-                              summary: Optional[str] = None) -> str:
+                              summary: Optional[str] = None,
+                              audience: str = 'end-users') -> str:
         """
         Format changes as a Slack-friendly message.
 
@@ -245,6 +337,7 @@ class ChangelogFormatter:
         Args:
             grouped_changes: Changes grouped by category
             version: Optional version string
+            audience: Target audience
             summary: Optional one-line summary
 
         Returns:
@@ -292,13 +385,15 @@ class ChangelogFormatter:
 
         return '\n'.join(lines)
 
-    def format_simple_list(self, grouped_changes: Dict[str, List[Dict[str, Any]]]) -> str:
+    def format_simple_list(self, grouped_changes: Dict[str, List[Dict[str, Any]]],
+                            audience: str = 'end-users') -> str:
         """
         Format changes as a simple bulleted list without headings.
         Useful for quick updates or small releases.
 
         Args:
             grouped_changes: Changes grouped by category
+            audience: Target audience
 
         Returns:
             Simple bullet list

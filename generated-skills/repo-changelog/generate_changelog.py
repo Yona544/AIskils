@@ -35,6 +35,10 @@ from change_consolidator import ChangeConsolidator
 from changelog_formatter import ChangelogFormatter
 from breaking_change_detector import BreakingChangeDetector
 from ai_interpreter import AIInterpreter
+from audience_profiles import (
+    get_profile, get_included_categories, get_category_names,
+    should_include_for_audience
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -112,6 +116,12 @@ Examples:
         '--stdout',
         action='store_true',
         help='Print to stdout instead of writing to file'
+    )
+    output_group.add_argument(
+        '--audience',
+        choices=['end-users', 'developers', 'executives'],
+        default='end-users',
+        help='Target audience for changelog detail level (default: end-users)'
     )
 
     # Preview and interactive options
@@ -234,7 +244,8 @@ class ChangelogGenerator:
     """Main changelog generation orchestrator."""
 
     def __init__(self, config_path: Optional[str] = None, repo_path: str = '.',
-                 ai_enabled: bool = False, ai_client: Any = None):
+                 ai_enabled: bool = False, ai_client: Any = None,
+                 audience: str = 'end-users'):
         """
         Initialize the changelog generator.
 
@@ -243,9 +254,11 @@ class ChangelogGenerator:
             repo_path: Path to git repository
             ai_enabled: Enable AI interpretation for ambiguous changes
             ai_client: Pre-configured AI client (Anthropic or OpenAI)
+            audience: Target audience ('end-users', 'developers', 'executives')
         """
         self.config = get_config(config_path)
         self.repo_path = Path(repo_path).resolve()
+        self.audience = audience
 
         # Initialize components
         self.git_analyzer = GitAnalyzer(str(self.repo_path), config_path)
@@ -254,8 +267,8 @@ class ChangelogGenerator:
         self.formatter = ChangelogFormatter(config_path)
         self.breaking_detector = BreakingChangeDetector(config_path)
 
-        # Initialize AI interpreter
-        self.ai_interpreter = AIInterpreter(config_path, ai_client=ai_client)
+        # Initialize AI interpreter with audience
+        self.ai_interpreter = AIInterpreter(config_path, ai_client=ai_client, audience=audience)
         self.ai_enabled = ai_enabled
 
     def generate(self, commit_range: Dict[str, Any],
@@ -331,8 +344,11 @@ class ChangelogGenerator:
         if categories:
             consolidated = [c for c in consolidated if c.get('category') in categories]
 
+        # Step 4b: Filter by audience
+        consolidated = [c for c in consolidated if should_include_for_audience(c, self.audience)]
+
         # Step 5: Group by category
-        grouped = self.consolidator.group_by_category(consolidated)
+        grouped = self.consolidator.group_by_category(consolidated, audience=self.audience)
 
         # Step 6: Generate statistics
         stats = {
@@ -389,13 +405,14 @@ class ChangelogGenerator:
             Formatted string
         """
         grouped = result.get('grouped', {})
+        stats = result.get('stats', {})
 
         if output_format == 'slack':
-            return self.formatter.format_slack_message(grouped, version, summary)
+            return self.formatter.format_slack_message(grouped, version, summary, audience=self.audience)
         elif output_format == 'simple':
-            return self.formatter.format_simple_list(grouped)
+            return self.formatter.format_simple_list(grouped, audience=self.audience)
         else:  # markdown
-            return self.formatter.format_changelog(grouped, version)
+            return self.formatter.format_changelog(grouped, version, audience=self.audience, stats=stats)
 
     def save_output(self, content: str,
                     output_path: Optional[str] = None,
@@ -613,11 +630,15 @@ def main() -> int:
             config_path=config_path,
             repo_path=args.repo,
             ai_enabled=ai_enabled,
-            ai_client=ai_client
+            ai_client=ai_client,
+            audience=args.audience
         )
     except Exception as e:
         print(f"Error initializing generator: {e}")
         return 1
+
+    # Log audience if verbose
+    log(f"Target audience: {args.audience}", args, 'verbose')
 
     # Determine commit range
     if args.last:

@@ -415,12 +415,14 @@ class ChangeConsolidator:
             confidence_order.get(x.get('confidence', 'low'), 99)
         ))
 
-    def group_by_category(self, changes: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
+    def group_by_category(self, changes: List[Dict[str, Any]],
+                          audience: str = 'end-users') -> Dict[str, List[Dict[str, Any]]]:
         """
         Group changes by category for formatting.
 
         Args:
             changes: Consolidated list of changes
+            audience: Target audience for category ordering
 
         Returns:
             Dictionary mapping category to list of changes
